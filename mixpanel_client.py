@@ -14,12 +14,13 @@ from datetime import date, timedelta
 
 import requests
 
-from config import MX_EU_BASE, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS
+from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS
 
 log = logging.getLogger(__name__)
 
 AUTH    = (MX_SA_USERNAME, MX_SA_SECRET)
-JQL_URL = f"{MX_EU_BASE}/api/2.0/jql"
+# EU data-residency projects use data-eu.mixpanel.com for all data APIs
+JQL_URL = "https://data-eu.mixpanel.com/api/2.0/jql"
 
 _SELECTORS = json.dumps([{"event": e} for e in ALL_EVENTS])
 
@@ -28,11 +29,15 @@ def _jql(script: str) -> list:
     resp = requests.post(
         JQL_URL,
         auth=AUTH,
-        data={"script": script},
+        data={"script": script, "project_id": MX_PROJECT_ID},
         timeout=90,
     )
+    if not resp.ok:
+        log.error("JQL API error %d: %s", resp.status_code, resp.text[:500])
     resp.raise_for_status()
-    return resp.json()
+    result = resp.json()
+    log.info("JQL returned %d rows", len(result) if isinstance(result, list) else -1)
+    return result
 
 
 def _totals_jql(from_date: str, to_date: str) -> dict[str, int]:
