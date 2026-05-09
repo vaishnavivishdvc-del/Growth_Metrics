@@ -1,0 +1,112 @@
+"""
+Mixpanel REST API client.
+
+Uses JQL (JavaScript Query Language) for true deduplicated weekly unique counts.
+Two batch calls per window:
+  - totals_jql  → raw event counts per event name
+  - uniques_jql → deduplicated seller counts per event name
+"""
+
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, timedelta
+
+import requests
+
+from config import MX_EU_BASE, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS
+
+log = logging.getLogger(__name__)
+
+AUTH    = (MX_SA_USERNAME, MX_SA_SECRET)
+JQL_URL = f"{MX_EU_BASE}/api/2.0/jql"
+
+_SELECTORS = json.dumps([{"event": e} for e in ALL_EVENTS])
+
+
+def _jql(script: str) -> list:
+    resp = requests.post(
+        JQL_URL,
+        auth=AUTH,
+        data={"script": script},
+        timeout=90,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _totals_jql(from_date: str, to_date: str) -> dict[str, int]:
+    """Total event count per event name."""
+    script = f"""
+function main() {{
+  return Events({{
+    from_date: '{from_date}',
+    to_date: '{to_date}',
+    event_selectors: {_SELECTORS}
+  }}).groupBy(['name'], mixpanel.reducer.count());
+}}"""
+    rows = _jql(script)
+    return {r["key"][0]: r["value"] for r in rows}
+
+
+def _uniques_jql(from_date: str, to_date: str) -> dict[str, int]:
+    """
+    Deduplicated unique seller count per event name.
+    groupByUser(['name']) creates one row per (user, event_name) pair,
+    then groupBy(['key.0']) counts unique users per event name.
+    """
+    script = f"""
+function main() {{
+  return Events({{
+    from_date: '{from_date}',
+    to_date: '{to_date}',
+    event_selectors: {_SELECTORS}
+  }}).groupByUser(['name'], mixpanel.reducer.noop())
+  .groupBy(['key.0'], mixpanel.reducer.count());
+}}"""
+    rows = _jql(script)
+    return {r["key"][0]: r["value"] for r in rows}
+
+
+def get_windows(n_weeks: int = 5) -> list[tuple[str, str]]:
+    """
+    Returns n_weeks windows, most-recent first.
+    W0 = last 7 days ending yesterday (the report window).
+    W1-W4 = prior 7-day windows used for Z-score baseline.
+    """
+    yesterday = date.today() - timedelta(days=1)
+    windows = []
+    for i in range(n_weeks):
+        to = yesterday - timedelta(weeks=i)
+        fr = to - timedelta(days=6)
+        windows.append((str(fr), str(to)))
+    return windows
+
+
+def fetch_all_windows(windows: list[tuple[str, str]]) -> list[dict]:
+    """
+    Fetch totals + uniques for every window in parallel.
+    Returns a list aligned with the input windows list.
+    """
+    results: list[dict | None] = [None] * len(windows)
+
+    def _fetch(idx: int, from_date: str, to_date: str):
+        log.info("Fetching window %s → %s", from_date, to_date)
+        tot  = _totals_jql(from_date, to_date)
+        uniq = _uniques_jql(from_date, to_date)
+        return idx, {"total": tot, "unique": uniq, "from": from_date, "to": to_date}
+
+    with ThreadPoolExecutor(max_workers=len(windows) * 2) as ex:
+        futures = {
+            ex.submit(_fetch, i, f, t): i
+            for i, (f, t) in enumerate(windows)
+        }
+        for fut in as_completed(futures):
+            try:
+                idx, data = fut.result()
+                results[idx] = data
+            except Exception:
+                log.exception("Failed fetching window %d", futures[fut])
+                results[futures[fut]] = {"total": {}, "unique": {}, "from": "", "to": ""}
+
+    return results
