@@ -12,6 +12,13 @@ jobs:
   run-brief:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      MIXPANEL_USER:      ${{ secrets.MIXPANEL_USER }}
+      MIXPANEL_SECRET:    ${{ secrets.MIXPANEL_SECRET }}
+      GMAIL_SENDER:       ${{ secrets.GMAIL_SENDER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      GMAIL_RECIPIENTS:   ${{ secrets.GMAIL_RECIPIENTS }}
+      GCHAT_WEBHOOK:      ${{ secrets.GCHAT_WEBHOOK }}
 
     steps:
       - name: Checkout repository
@@ -26,12 +33,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Debug environment
+        run: |
+          python --version
+          pip show apscheduler numpy requests python-dotenv pytz
+          python -c "
+          import os
+          keys = ['MIXPANEL_USER','MIXPANEL_SECRET','GMAIL_SENDER','GMAIL_APP_PASSWORD','GMAIL_RECIPIENTS','GCHAT_WEBHOOK']
+          for k in keys:
+              v = os.environ.get(k,'')
+              print(f'{k}: {chr(34)}SET (len={len(v)}){chr(34) if v else chr(34)+\"MISSING\"+chr(34)}')
+          "
+
       - name: Run GC Brief
         run: python main.py --now
-        env:
-          MIXPANEL_USER:      ${{ secrets.MIXPANEL_USER }}
-          MIXPANEL_SECRET:    ${{ secrets.MIXPANEL_SECRET }}
-          GMAIL_SENDER:       ${{ secrets.GMAIL_SENDER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          GMAIL_RECIPIENTS:   ${{ secrets.GMAIL_RECIPIENTS }}
-          GCHAT_WEBHOOK:      ${{ secrets.GCHAT_WEBHOOK }}
