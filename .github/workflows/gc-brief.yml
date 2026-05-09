@@ -29,11 +29,9 @@ jobs:
       - name: Run GC Brief
         run: python main.py --now
         env:
-          MX_PROJECT_ID:      ${{ secrets.MX_PROJECT_ID }}
-          MX_SA_USERNAME:     ${{ secrets.MX_SA_USERNAME }}
-          MX_SA_SECRET:       ${{ secrets.MX_SA_SECRET }}
-          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          MIXPANEL_USER:      ${{ secrets.MIXPANEL_USER }}
+          MIXPANEL_SECRET:    ${{ secrets.MIXPANEL_SECRET }}
+          GMAIL_SENDER:       ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          GMAIL_TO:           ${{ secrets.GMAIL_TO }}
-          GMAIL_CC:           ${{ secrets.GMAIL_CC }}
+          GMAIL_RECIPIENTS:   ${{ secrets.GMAIL_RECIPIENTS }}
           GCHAT_WEBHOOK:      ${{ secrets.GCHAT_WEBHOOK }}

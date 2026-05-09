@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _REQUIRED = [
-    "MX_SA_USERNAME",
-    "MX_SA_SECRET",
-    "GMAIL_USER",
+    "MIXPANEL_USER",
+    "MIXPANEL_SECRET",
+    "GMAIL_SENDER",
     "GMAIL_APP_PASSWORD",
-    "GMAIL_TO",
+    "GMAIL_RECIPIENTS",
     "GCHAT_WEBHOOK",
 ]
 _missing = [k for k in _REQUIRED if not os.environ.get(k)]
@@ -26,14 +26,14 @@ if _missing:
 
 # ── Mixpanel ──────────────────────────────────────────────────────────────────
 MX_PROJECT_ID  = int(os.getenv("MX_PROJECT_ID", "2823261"))
-MX_SA_USERNAME = os.environ["MX_SA_USERNAME"]   # service account username
-MX_SA_SECRET   = os.environ["MX_SA_SECRET"]     # service account secret
+MX_SA_USERNAME = os.environ["MIXPANEL_USER"]    # service account username
+MX_SA_SECRET   = os.environ["MIXPANEL_SECRET"]  # service account secret
 MX_EU_BASE     = "https://eu.mixpanel.com"
 
 # ── Gmail (SMTP + App Password) ───────────────────────────────────────────────
-GMAIL_USER         = os.environ["GMAIL_USER"]
+GMAIL_USER         = os.environ["GMAIL_SENDER"]
 GMAIL_APP_PASSWORD = os.environ["GMAIL_APP_PASSWORD"]
-GMAIL_TO           = [e.strip() for e in os.environ.get("GMAIL_TO", "").split(",") if e.strip()]
+GMAIL_TO           = [e.strip() for e in os.environ.get("GMAIL_RECIPIENTS", "").split(",") if e.strip()]
 GMAIL_CC           = [e.strip() for e in os.environ.get("GMAIL_CC", "").split(",") if e.strip()]
 
 # ── Google Chat ───────────────────────────────────────────────────────────────
