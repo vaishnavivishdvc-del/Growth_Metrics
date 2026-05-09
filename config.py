@@ -1,7 +1,28 @@
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
+
+_REQUIRED = [
+    "MX_SA_USERNAME",
+    "MX_SA_SECRET",
+    "GMAIL_USER",
+    "GMAIL_APP_PASSWORD",
+    "GMAIL_TO",
+    "GCHAT_WEBHOOK",
+]
+_missing = [k for k in _REQUIRED if not os.environ.get(k)]
+if _missing:
+    print(
+        "\n[gc_brief] ERROR: The following required environment variables / "
+        "GitHub Secrets are not set:\n"
+        + "\n".join(f"  - {k}" for k in _missing)
+        + "\n\nAdd them via: GitHub repo → Settings → Secrets and variables "
+          "→ Actions → New repository secret\n",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 # ── Mixpanel ──────────────────────────────────────────────────────────────────
 MX_PROJECT_ID  = int(os.getenv("MX_PROJECT_ID", "2823261"))
