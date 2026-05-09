@@ -1,0 +1,36 @@
+name: GC Weekly Brief
+
+on:
+  schedule:
+    - cron: "30 4 * * *"   # 10:00 AM IST (UTC+5:30) every day
+  workflow_dispatch:         # manual trigger from GitHub UI
+
+jobs:
+  run-brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run GC Brief
+        run: python main.py --now
+        env:
+          MX_PROJECT_ID:      ${{ secrets.MX_PROJECT_ID }}
+          MX_SA_USERNAME:     ${{ secrets.MX_SA_USERNAME }}
+          MX_SA_SECRET:       ${{ secrets.MX_SA_SECRET }}
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_TO:           ${{ secrets.GMAIL_TO }}
+          GMAIL_CC:           ${{ secrets.GMAIL_CC }}
+          GCHAT_WEBHOOK:      ${{ secrets.GCHAT_WEBHOOK }}
