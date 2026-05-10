@@ -86,40 +86,102 @@ def _tbl(headers: list[str], rows: list[list]) -> str:
     )
 
 
+# ── per-section callout helpers ───────────────────────────────────────────────
+
+def _pill_callout(m: dict) -> str:
+    pcr      = m["pill_click_rate"]
+    prev_pcr = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
+    delta    = round(pcr - prev_pcr, 1)
+    wow_u    = round((m["tot_pills_shown_u"] - m["prev_pills_shown_u"]) / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
+    lines = []
+    if abs(wow_u) > 5:
+        dir_ = "up" if wow_u > 0 else "down"
+        lines.append(f"Pill reach is {dir_} {abs(wow_u):.1f}% WoW — monitor for sustained {'growth' if wow_u > 0 else 'decline'}.")
+    if abs(delta) >= 1:
+        dir_ = "improved" if delta > 0 else "dropped"
+        lines.append(f"Pill click rate {dir_} {abs(delta):.1f} pp to {_pct(pcr)} — {'healthy engagement trend.' if delta > 0 else 'check pill UI or copy for changes.'}")
+    else:
+        lines.append(f"Pill click rate stable at {_pct(pcr)} (Δ {'+' if delta >= 0 else ''}{delta} pp vs last week).")
+    return "<ul>" + "".join(f"<li>{l}</li>" for l in lines) + "</ul>"
+
+
+def _alert_callout(m: dict) -> str:
+    alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
+    prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
+    delta          = round(alert_ctr - prev_alert_ctr, 1)
+    imp_ctr  = round(m["alert_rows"][0]["ctr"], 1) if m.get("alert_rows") else 0
+    conv_ctr = round(m["alert_rows"][1]["ctr"], 1) if len(m.get("alert_rows", [])) > 1 else 0
+    lines = []
+    lines.append(
+        f"Impressions Alert CTR {_pct(imp_ctr)} vs Conversion Alert CTR {_pct(conv_ctr)} — "
+        f"{'conversion alert under-performing; consider copy refresh.' if conv_ctr < imp_ctr - 1 else 'both alert types performing comparably.'}"
+    )
+    if abs(delta) >= 1:
+        dir_ = "improved" if delta > 0 else "dropped"
+        lines.append(f"Overall alert CTR {dir_} {abs(delta):.1f} pp WoW to {_pct(alert_ctr)}.")
+    return "<ul>" + "".join(f"<li>{l}</li>" for l in lines) + "</ul>"
+
+
+def _reco_callout(m: dict) -> str:
+    reco_ctr      = round(m["tot_reco_applied_u"] / m["tot_reco_shown_u"] * 100, 1) if m["tot_reco_shown_u"] else 0
+    prev_reco_ctr = round(m["prev_reco_applied_u"] / m["prev_reco_shown_u"] * 100, 1) if m.get("prev_reco_shown_u") else 0
+    delta         = round(reco_ctr - prev_reco_ctr, 1)
+    all_recos = m["rest_reco_rows"] + [{"name": "Price Recos", "applied_u": m["price_applied_u"],
+                                        "shown_u": m["price_shown_u"],
+                                        "adoption": round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0}]
+    top   = max(all_recos, key=lambda r: r["applied_u"], default=None)
+    lines = []
+    if top:
+        lines.append(f"{top['name']} leads with {_fmt(top['applied_u'])} sellers applied ({_pct(top['adoption'])} adoption rate).")
+    if abs(delta) >= 1:
+        dir_ = "improved" if delta > 0 else "dropped"
+        lines.append(f"Overall reco adoption {dir_} {abs(delta):.1f} pp WoW to {_pct(reco_ctr)} — {'momentum building.' if delta > 0 else 'investigate which reco types are softening.'}")
+    no_apply = [r["name"] for r in m["rest_reco_rows"] if r["shown_u"] > 0 and r["applied_u"] == 0]
+    if no_apply:
+        lines.append(f"⚠️ Tracking risk: {', '.join(no_apply)} shown to sellers but 0 applied — verify instrumentation.")
+    return "<ul>" + "".join(f"<li>{l}</li>" for l in lines) + "</ul>"
+
+
 # ── executive summary (auto-generated) ───────────────────────────────────────
 
 def _exec_summary(m: dict) -> str:
     bullets = []
 
-    # pill headline
-    pcr = m["pill_click_rate"]
+    # 1. Pills reach + engagement rate vs prev week
+    pcr      = m["pill_click_rate"]
+    prev_pcr = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
     pills_wow = _wow(m["tot_pills_shown_u"], m["prev_pills_shown_u"])
+    pcr_dir   = f"({'+' if pcr >= prev_pcr else ''}{round(pcr - prev_pcr, 1)} pp vs last week)"
     bullets.append(
         f"{_fmt(m['tot_pills_shown_u'])} sellers saw pills this week ({pills_wow} WoW); "
-        f"click rate {_pct(pcr)}."
+        f"pill click rate {_pct(pcr)} {pcr_dir}."
     )
 
-    # top performing reco
-    all_recos = m["rest_reco_rows"] + [{
-        "name": "Price Recos",
-        "applied_u": m["price_applied_u"],
-        "shown_u":   m["price_shown_u"],
-        "adoption":  round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0,
-    }]
-    top = max(all_recos, key=lambda r: r["applied_u"], default=None)
-    if top:
-        bullets.append(
-            f"{top['name']} leads reco adoption — {_fmt(top['applied_u'])} sellers applied "
-            f"({_pct(top['adoption'])} adoption rate)."
-        )
+    # 2. Alerts engagement rate (unique CTR) vs prev week
+    alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
+    prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
+    alert_dir      = f"({'+' if alert_ctr >= prev_alert_ctr else ''}{round(alert_ctr - prev_alert_ctr, 1)} pp vs last week)"
+    bullets.append(
+        f"{_fmt(m['tot_alert_shown_u'])} sellers reached by alerts; "
+        f"alert engagement rate {_pct(alert_ctr)} {alert_dir}."
+    )
 
-    # anomaly callout
+    # 3. Overall reco adoption rate (unique applied / unique shown) vs prev week
+    reco_ctr      = round(m["tot_reco_applied_u"] / m["tot_reco_shown_u"] * 100, 1) if m["tot_reco_shown_u"] else 0
+    prev_reco_ctr = round(m["prev_reco_applied_u"] / m["prev_reco_shown_u"] * 100, 1) if m.get("prev_reco_shown_u") else 0
+    reco_dir      = f"({'+' if reco_ctr >= prev_reco_ctr else ''}{round(reco_ctr - prev_reco_ctr, 1)} pp vs last week)"
+    bullets.append(
+        f"Overall reco adoption: {_pct(reco_ctr)} — {_fmt(m['tot_reco_applied_u'])} sellers applied "
+        f"out of {_fmt(m['tot_reco_shown_u'])} shown {reco_dir}."
+    )
+
+    # 4. Anomaly callout
     critical = [a for a in m["anomalies"] if a.get("type") == "zscore"]
     if critical:
         names = ", ".join(a["name"] for a in critical)
-        bullets.append(f"⚠️ Anomaly detected: {names} — see Anomaly Alerts section.")
+        bullets.append(f"⚠️ Anomaly detected: {names} — see Anomaly Alerts section below.")
     else:
-        bullets.append("No critical anomalies this week. All engagement signals within normal range.")
+        bullets.append("✅ No critical anomalies this week. All engagement signals within normal range.")
 
     return "<ul>" + "".join(f"<li>{b}</li>" for b in bullets) + "</ul>"
 
@@ -280,9 +342,6 @@ def build_html(m: dict) -> str:
 <h2>🔍 Executive Summary</h2>
 {_exec_summary(m)}
 
-<h2>🚨 Anomaly Alerts &amp; Tracking Health</h2>
-{anomaly_html}
-
 <h2>🔁 Funnel Conversion &amp; Engagement</h2>
 
 <h3>Funnel 1 — Pills — {pf} to {pt}</h3>
@@ -290,6 +349,7 @@ def build_html(m: dict) -> str:
 {_tbl(["Stage", "This 7 Days", "Prev 7 Days", "WoW %", "Conversion"], pill_uniq_rows)}
 <p><b>Total Events</b></p>
 {_tbl(["Stage", "This 7 Days", "Prev 7 Days", "WoW %", "Events/Seller"], pill_tot_rows)}
+{_pill_callout(m)}
 
 <h3>Funnel 2 — Alert Engagement — {pf} to {pt}</h3>
 {_tbl(
@@ -297,12 +357,14 @@ def build_html(m: dict) -> str:
      "Clicked (Unique)", "Clicked (Events)", "CTR", "Prev 7d CTR", "Δ pp"],
     alert_tbl_rows
 )}
+{_alert_callout(m)}
 
 <h3>Funnel 3 — Reco Adoption — {pf} to {pt}</h3>
 <p><b>Unique Sellers</b></p>
 {_tbl(["Stage", "This 7 Days", "Prev 7 Days", "WoW %", "Conversion"], reco_uniq_rows)}
 <p><b>Total Events</b></p>
 {_tbl(["Stage", "This 7 Days", "Prev 7 Days", "WoW %", "Events/Seller"], reco_tot_rows)}
+{_reco_callout(m)}
 
 <h2>⚠️ Negative Signals</h2>
 {_tbl(
@@ -314,7 +376,7 @@ def build_html(m: dict) -> str:
 
 <h3>Reco Ranking — {pf} to {pt}</h3>
 {_tbl(
-    ["Reco Type", "Unique Applied", "Total Applied", "Events/Seller",
+    ["Reco Type", "Sellers Applied", "Total Events", "Events/Seller",
      "Unique Shown", "Adoption %", "Prev Adoption", "WoW Change"],
     all_reco_tbl
 )}
@@ -322,7 +384,7 @@ def build_html(m: dict) -> str:
 <h3>Price Reco Sub-breakdown</h3>
 {_tbl(
     ["Sub-type", "Shown (Unique)", "Shown (Events)",
-     "Applied (Unique)", "Applied (Events)", "Adoption %"],
+     "Sellers Applied", "Total Events", "Adoption %"],
     price_sub_rows
 )}
 
@@ -332,6 +394,9 @@ def build_html(m: dict) -> str:
      "Clicks/Seller", "Prev 7d Unique", "WoW Change"],
     pill_rank_tbl
 )}
+
+<h2>🚨 Anomaly Alerts &amp; Tracking Health</h2>
+{anomaly_html}
 
 </body>
 </html>"""
