@@ -19,8 +19,7 @@ from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS
 log = logging.getLogger(__name__)
 
 AUTH    = (MX_SA_USERNAME, MX_SA_SECRET)
-# EU data-residency projects use data-eu.mixpanel.com for all data APIs
-JQL_URL = "https://data-eu.mixpanel.com/api/2.0/jql"
+JQL_URL = "https://eu.mixpanel.com/api/2.0/jql"
 
 _SELECTORS = json.dumps([{"event": e} for e in ALL_EVENTS])
 
@@ -107,11 +106,7 @@ def fetch_all_windows(windows: list[tuple[str, str]]) -> list[dict]:
             for i, (f, t) in enumerate(windows)
         }
         for fut in as_completed(futures):
-            try:
-                idx, data = fut.result()
-                results[idx] = data
-            except Exception:
-                log.exception("Failed fetching window %d", futures[fut])
-                results[futures[fut]] = {"total": {}, "unique": {}, "from": "", "to": ""}
+            idx, data = fut.result()   # raises immediately on any API failure
+            results[idx] = data
 
     return results
