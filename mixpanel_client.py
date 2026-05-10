@@ -56,8 +56,8 @@ function main() {{
 def _uniques_jql(from_date: str, to_date: str) -> dict[str, int]:
     """
     Deduplicated unique seller count per event name.
-    groupByUser(['name']) creates one row per (user, event_name) pair,
-    then groupBy(['key.0']) counts unique users per event name.
+    groupByUser(['name']) produces key=[distinct_id, event_name].
+    We then groupBy key.1 (event_name) and count → unique users per event.
     """
     script = f"""
 function main() {{
@@ -65,8 +65,8 @@ function main() {{
     from_date: '{from_date}',
     to_date: '{to_date}',
     event_selectors: {_SELECTORS}
-  }}).groupByUser(['name'], mixpanel.reducer.noop())
-  .groupBy(['key.0'], mixpanel.reducer.count());
+  }}).groupByUser(['name'], mixpanel.reducer.any())
+  .groupBy(['key.1'], mixpanel.reducer.count());
 }}"""
     rows = _jql(script)
     return {r["key"][0]: r["value"] for r in rows}
