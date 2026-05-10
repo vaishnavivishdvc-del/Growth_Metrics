@@ -52,7 +52,6 @@ PILLS_SHOWN = [
 PILLS_CLICKED = [
     "gc_losing_imp_listings_filter_click",
     "gc_losing_conv_listings_filter_click",
-    "gc_low_conv_filter_click",
 ]
 ALERTS_SHOWN = [
     "gc_impressions_alert_shown",
@@ -110,5 +109,4 @@ REST_RECO_LABELS = {
 PILL_LABELS = {
     "gc_losing_imp_listings_filter_click":  "Losing Imp",
     "gc_losing_conv_listings_filter_click": "Losing Conv",
-    "gc_low_conv_filter_click":             "Low Conv",
 }

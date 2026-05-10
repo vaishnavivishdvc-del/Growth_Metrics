@@ -73,10 +73,9 @@ def compute(fetched: list[dict]) -> dict:
     u1      = w1["unique"]
 
     # ── Pills ─────────────────────────────────────────────────────────────────
-    # Aggregation rule: Clicked = imp_click + low_conv (NOT conv_click per spec)
     PILL_CLICK_EVENTS = [
         "gc_losing_imp_listings_filter_click",
-        "gc_low_conv_filter_click",
+        "gc_losing_conv_listings_filter_click",
     ]
 
     pill_shown_rows = [
