@@ -9,6 +9,7 @@ Two batch calls per window:
 
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 
@@ -24,19 +25,31 @@ JQL_URL = "https://eu.mixpanel.com/api/2.0/jql"
 _SELECTORS = json.dumps([{"event": e} for e in ALL_EVENTS])
 
 
+_MAX_RETRIES = 4
+_RETRY_WAIT  = 70   # seconds — just over Mixpanel's 60-s rolling window
+
+
 def _jql(script: str) -> list:
-    resp = requests.post(
-        JQL_URL,
-        auth=AUTH,
-        data={"script": script, "project_id": MX_PROJECT_ID},
-        timeout=90,
-    )
-    if not resp.ok:
-        log.error("JQL API error %d: %s", resp.status_code, resp.text[:500])
-    resp.raise_for_status()
-    result = resp.json()
-    log.info("JQL returned %d rows", len(result) if isinstance(result, list) else -1)
-    return result
+    for attempt in range(_MAX_RETRIES):
+        resp = requests.post(
+            JQL_URL,
+            auth=AUTH,
+            data={"script": script, "project_id": MX_PROJECT_ID},
+            timeout=90,
+        )
+        if resp.status_code == 429:
+            wait = _RETRY_WAIT * (attempt + 1)
+            log.warning("Rate limited (429). Waiting %ds then retrying (attempt %d/%d)…",
+                        wait, attempt + 1, _MAX_RETRIES - 1)
+            time.sleep(wait)
+            continue
+        if not resp.ok:
+            log.error("JQL API error %d: %s", resp.status_code, resp.text[:500])
+        resp.raise_for_status()
+        result = resp.json()
+        log.info("JQL returned %d rows", len(result) if isinstance(result, list) else -1)
+        return result
+    raise RuntimeError("Mixpanel JQL rate limit not resolved after %d retries" % _MAX_RETRIES)
 
 
 def _totals_jql(from_date: str, to_date: str) -> dict[str, int]:
@@ -100,7 +113,10 @@ def fetch_all_windows(windows: list[tuple[str, str]]) -> list[dict]:
         uniq = _uniques_jql(from_date, to_date)
         return idx, {"total": tot, "unique": uniq, "from": from_date, "to": to_date}
 
-    with ThreadPoolExecutor(max_workers=len(windows) * 2) as ex:
+    # max_workers=2 → at most 2 windows fetched in parallel = max 2 concurrent JQL
+    # queries at a time (totals + uniques inside each thread run sequentially).
+    # Mixpanel allows 5 concurrent and 60/hour; this keeps us comfortably under both.
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures = {
             ex.submit(_fetch, i, f, t): i
             for i, (f, t) in enumerate(windows)
