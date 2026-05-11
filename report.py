@@ -377,7 +377,7 @@ def build_html(m: dict) -> str:
 <h3>Reco Ranking — {pf} to {pt}</h3>
 {_tbl(
     ["Reco Type", "Sellers Applied", "Total Events", "Events/Seller",
-     "Unique Shown", "Adoption %", "Prev Adoption", "WoW Change"],
+     "Sellers Shown", "Adoption %", "Prev Adoption", "WoW Change"],
     all_reco_tbl
 )}
 
