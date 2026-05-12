@@ -2,7 +2,7 @@ name: GC Weekly Brief
 
 on:
   schedule:
-    - cron: "30 4 * * *"   # 10:00 AM IST (UTC+5:30) every day
+    - cron: "30 4 * * 1"   # 10:00 AM IST (UTC+5:30) every Monday
   workflow_dispatch:         # manual trigger from GitHub UI
 
 env:
