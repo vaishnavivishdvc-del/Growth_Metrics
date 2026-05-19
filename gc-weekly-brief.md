@@ -367,21 +367,25 @@ Highlight any channel shift > 10% from its 7-day average with a bullet point.
 - Tables for all breakdowns; bullet points for interpretations (max 2 per section)
 - No filler words. Every sentence must carry a number or an action
 - **Gmail output**: Full report (all sections)
-- **Google Chat output**: Compact KPI card block + anomalies only. Use this exact format:
+- **Google Chat output**: KPI summary + Reco RCA (if drop). No anomaly alerts, no Z-scores, no baseline labels. Use this exact format:
 
 ```
-📊 *GC Brief — [Date Range]*  |  Week [N] of tracking (baseline: [N-1] wks)
+*GC Brief — [Date Range]*
 
-🔔 Alerts CTR:      *X.X%*  ([+/-X.X pp WoW])  [🟢/🟡/🔴]
-💊 Filter CTR:      *X.X%*  ([+/-X.X pp WoW])  [🟢/🟡/🔴]
-✅ Reco Adoption:   *X.X%*  ([+/-X.X pp WoW])  [🟢/🟡/🔴]
+Alerts CTR:     *X.X%*  [+/-X.X pp WoW]  [(+)/(~)/(-)]
+Filter CTR:     *X.X%*  [+/-X.X pp WoW]  [(+)/(~)/(-)]
+Reco Adoption:  *X.X%*  [+/-X.X pp WoW]  [(+)/(~)/(-)]
 
-[If any 🟡 or 🔴 — add RCA line(s):]
-⚠️ *[Metric] drop driven by [sub-type]*: [one-line finding + action]
+[Only if Reco Adoption dropped > 1 pp:]
+*Reco Adoption Drop — by Type:*
+  Price Recos: X.X% (prev X.X%, [+/-X.X pp])
+  [Reco Type]: X.X% (prev X.X%, [+/-X.X pp])
+  ...sorted worst first
 
-[If all 🟢:]
-✅ All signals healthy this week.
+_Full report sent via email._
 ```
+
+Status indicators: `(+)` = stable/up, `(~)` = mild drop (1–3 pp), `(-)` = significant drop (>3 pp).
 
 ---
 

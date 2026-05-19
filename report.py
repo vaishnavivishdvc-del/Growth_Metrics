@@ -172,43 +172,45 @@ def _kpi_cards(m: dict) -> str:
     f_icon, f_cls = _si(filter_delta)
     r_icon, r_cls = _si(reco_delta)
 
-    c = "border:1px solid #e0e0e0;padding:8px 12px;"
+    c = "border:1px solid #e0e0e0;padding:8px 12px;font-size:13px;"
     card = (
-        '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">'
+        '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">'
         '<thead><tr>'
         '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;width:20%;"></th>'
-        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">🔔 GC Alerts Click Rate</th>'
-        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">💊 Filter Click Rate</th>'
-        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">✅ GC Reco Adoption Rate</th>'
+        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">Alerts Click Rate</th>'
+        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">Filter Click Rate</th>'
+        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">Reco Adoption Rate</th>'
         '</tr></thead><tbody>'
         f'<tr><td style="{c}font-weight:bold;">This week</td>'
-        f'<td style="{c}text-align:center;font-size:18px;font-weight:bold;">{_pct(alert_ctr)}</td>'
-        f'<td style="{c}text-align:center;font-size:18px;font-weight:bold;">{_pct(filter_ctr)}</td>'
-        f'<td style="{c}text-align:center;font-size:18px;font-weight:bold;">{_pct(reco_adoption)}</td></tr>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(alert_ctr)}</td>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(filter_ctr)}</td>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(reco_adoption)}</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">Last week</td>'
         f'<td style="{c}text-align:center;">{_pct(prev_alert_ctr)}</td>'
         f'<td style="{c}text-align:center;">{_pct(prev_filter_ctr)}</td>'
         f'<td style="{c}text-align:center;">{_pct(prev_reco_adoption)}</td></tr>'
-        f'<tr><td style="{c}font-weight:bold;">WoW Δ (pp)</td>'
+        f'<tr><td style="{c}font-weight:bold;">WoW change</td>'
         f'<td style="{c}text-align:center;">{_dp(alert_delta)}</td>'
         f'<td style="{c}text-align:center;">{_dp(filter_delta)}</td>'
         f'<td style="{c}text-align:center;">{_dp(reco_delta)}</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">Status</td>'
-        f'<td style="{c}text-align:center;font-size:20px;"><span class="{a_cls}">{a_icon}</span></td>'
-        f'<td style="{c}text-align:center;font-size:20px;"><span class="{f_cls}">{f_icon}</span></td>'
-        f'<td style="{c}text-align:center;font-size:20px;"><span class="{r_cls}">{r_icon}</span></td></tr>'
+        f'<td style="{c}text-align:center;"><span class="{a_cls}">{a_icon}</span></td>'
+        f'<td style="{c}text-align:center;"><span class="{f_cls}">{f_icon}</span></td>'
+        f'<td style="{c}text-align:center;"><span class="{r_cls}">{r_icon}</span></td></tr>'
         '</tbody></table>'
     )
 
     rca_parts = []
 
     if alert_delta < -1:
-        rca_tbl = [[r["name"], _fmt(r["shown_u"]), _fmt(r["clicked_u"]),
-                    _pct(r["ctr"]), f"{r['delta_pp']:+.1f} pp"]
+        rca_tbl = [[r["name"], _fmt(r["shown_u"]), _fmt(r["shown_t"]),
+                    _fmt(r["clicked_u"]), _fmt(r["clicked_t"]),
+                    _pct(r["ctr"]), _pct(r["prev_ctr"]), f"{r['delta_pp']:+.1f} pp"]
                    for r in m["alert_rows"]]
         rca_parts.append(
-            "<h3>🔍 Alert CTR Drop — RCA by Alert Type</h3>"
-            + _tbl(["Alert Type", "Shown (Unique)", "Clicked (Unique)", "CTR", "Δ pp vs prev wk"], rca_tbl)
+            "<h3>Alert CTR Drop — RCA by Alert Type</h3>"
+            + _tbl(["Alert Type", "Shown (Unique)", "Shown (Events)",
+                    "Clicked (Unique)", "Clicked (Events)", "CTR", "Prev 7d CTR", "Δ pp"], rca_tbl)
         )
 
     if filter_delta < -1:
@@ -223,7 +225,7 @@ def _kpi_cards(m: dict) -> str:
                                 _pct(this_ctr), f"{round(this_ctr - prev_ctr, 1):+.1f} pp"])
         if rca_tbl:
             rca_parts.append(
-                "<h3>🔍 Filter CTR Drop — RCA by Pill Type</h3>"
+                "<h3>Filter CTR Drop — RCA by Pill Type</h3>"
                 + _tbl(["Pill", "Shown (Unique)", "Clicked (Unique)", "CTR", "Δ pp vs prev wk"], rca_tbl)
             )
 
@@ -239,7 +241,7 @@ def _kpi_cards(m: dict) -> str:
             for r in m["rest_reco_rows"]
         ]
         rca_parts.append(
-            "<h3>🔍 Reco Adoption Drop — RCA by Reco Type</h3>"
+            "<h3>Reco Adoption Drop — RCA by Reco Type</h3>"
             + _tbl(["Reco Type", "Sellers Shown", "Sellers Applied", "Adoption %", "Δ pp vs prev wk"], rca_tbl)
         )
 
@@ -403,10 +405,10 @@ def build_html(m: dict) -> str:
 <h1>📊 Growth Central Weekly Brief</h1>
 <p class="period">Period: {period} | {week_label} | Generated by gc_brief automation</p>
 
-<h2>� KPI Summary</h2>
+<h2>KPI Summary</h2>
 {_kpi_cards(m)}
 
-<h2>� Alert Metrics — {pf} to {pt}</h2>
+<h2>Alert Metrics — {pf} to {pt}</h2>
 {_tbl(
     ["Alert Type", "Shown (Unique)", "Shown (Events)",
      "Clicked (Unique)", "Clicked (Events)", "CTR", "Prev 7d CTR", "Δ pp"],
@@ -414,14 +416,14 @@ def build_html(m: dict) -> str:
 )}
 {_alert_callout(m)}
 
-<h2>💊 Pill Metrics — {pf} to {pt}</h2>
+<h2>Pill Metrics — {pf} to {pt}</h2>
 <h3>Unique Sellers</h3>
 {_tbl(["Stage", "This 7 Days", "Prev 7 Days", "WoW %", "Conversion"], pill_uniq_rows)}
 <h3>Total Events</h3>
 {_tbl(["Stage", "This 7 Days", "Prev 7 Days", "WoW %", "Events/Seller"], pill_tot_rows)}
 {_pill_callout(m)}
 
-<h2>🏆 Feature Traction — {pf} to {pt}</h2>
+<h2>Feature Traction — {pf} to {pt}</h2>
 
 <h3>Reco Type Ranking</h3>
 {_tbl(
@@ -445,14 +447,14 @@ def build_html(m: dict) -> str:
     pill_rank_tbl
 )}
 
-<h2>⚠️ Negative Signals</h2>
+<h2>Negative Signals</h2>
 <p><em>{baseline_label}</em></p>
 {_tbl(
     ["Signal", "This 7 Days", "Baseline Avg", "Std Dev", "Z-score", "Status"],
     z_rows
 )}
 
-<h2>🚨 Anomaly Alerts &amp; Tracking Health</h2>
+<h2>Anomaly Alerts</h2>
 {anomaly_html}
 
 </body>
@@ -460,13 +462,10 @@ def build_html(m: dict) -> str:
     return html
 
 
-# ── Google Chat text (KPI cards + anomalies only) ────────────────────────────
+# ── Google Chat text (KPI summary + Reco RCA only) ───────────────────────────
 
 def build_chat_text(m: dict) -> str:
     period = f"{m['period_from']} – {m['period_to']}"
-    n = m.get("n_baseline")
-    wk = (n + 1) if isinstance(n, int) else "?"
-    bl = n if isinstance(n, int) else "?"
 
     alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
     prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
@@ -484,60 +483,29 @@ def build_chat_text(m: dict) -> str:
         return f"{'+' if d >= 0 else ''}{d} pp"
 
     def _si(d: float) -> str:
-        return "🔴" if d < -3 else ("🟡" if d < -1 else "🟢")
+        return "(-)" if d < -3 else ("(~)" if d < -1 else "(+)")
 
     lines = [
-        f"*📊 GC Brief — {period}*  |  Week {wk} of tracking (baseline: {bl} wks)",
+        f"*GC Brief — {period}*",
         "",
-        f"🔔 Alerts CTR:      *{_pct(alert_ctr)}*  ({_dp(alert_delta)} WoW)  {_si(alert_delta)}",
-        f"💊 Filter CTR:      *{_pct(filter_ctr)}*  ({_dp(filter_delta)} WoW)  {_si(filter_delta)}",
-        f"✅ Reco Adoption:   *{_pct(reco_adoption)}*  ({_dp(reco_delta)} WoW)  {_si(reco_delta)}",
-        "",
+        f"Alerts CTR:     *{_pct(alert_ctr)}*  {_dp(alert_delta)} WoW  {_si(alert_delta)}",
+        f"Filter CTR:     *{_pct(filter_ctr)}*  {_dp(filter_delta)} WoW  {_si(filter_delta)}",
+        f"Reco Adoption:  *{_pct(reco_adoption)}*  {_dp(reco_delta)} WoW  {_si(reco_delta)}",
     ]
 
-    rca_lines = []
-    if alert_delta < -1:
-        worst = min(m["alert_rows"], key=lambda r: r["delta_pp"]) if m["alert_rows"] else None
-        if worst:
-            rca_lines.append(
-                f"⚠️ *Alert CTR drop — {worst['name']}*: "
-                f"{_pct(worst['ctr'])} (prev {_pct(worst['prev_ctr'])}, {worst['delta_pp']:+.1f} pp). Audit alert trigger/copy."
-            )
-
-    if filter_delta < -1:
-        worst_pill = min(m["pill_click_rows"], key=lambda r: r["clicked_u"] - r["prev_u"]) if m["pill_click_rows"] else None
-        if worst_pill:
-            rca_lines.append(
-                f"⚠️ *Filter CTR drop — {worst_pill['name']}*: "
-                f"{_fmt(worst_pill['clicked_u'])} sellers clicked (prev {_fmt(worst_pill['prev_u'])}, "
-                f"{_wow(worst_pill['clicked_u'], worst_pill['prev_u'])} WoW). Check pill UI."
-            )
-
-    if reco_delta < -1 and m["rest_reco_rows"]:
-        worst_reco = min(m["rest_reco_rows"], key=lambda r: r["adoption"] - r["prev_adoption"])
-        d = round(worst_reco["adoption"] - worst_reco["prev_adoption"], 1)
-        rca_lines.append(
-            f"⚠️ *Reco Adoption drop — {worst_reco['name']}*: "
-            f"{_pct(worst_reco['adoption'])} (prev {_pct(worst_reco['prev_adoption'])}, {d:+.1f} pp). "
-            f"Check eligibility/trigger."
-        )
-
-    lines += rca_lines if rca_lines else ["✅ All signals healthy this week."]
-
-    if m["anomalies"]:
-        lines += ["", "*🚨 Anomaly Alerts*"]
-        for a in m["anomalies"]:
-            if a["type"] == "zscore":
-                lines.append(
-                    f"🔴 *{a['name']}* Z={a['z']} | "
-                    f"this week: {_pct(a['value'])} | baseline avg: {_pct(a['mean'])}"
-                )
-            elif a["type"] == "tracking_risk":
-                label = a["event"].replace("gc_", "").replace("_", " ")
-                lines.append(f"⚠️ Tracking risk: {label} — shown > 0, applied = 0")
-            elif a["type"] == "funnel_inversion":
-                label = a["event"].replace("gc_", "").replace("_", " ")
-                lines.append(f"⚠️ Funnel inversion: {label} — applied > shown")
+    if reco_delta < -1:
+        price_adp = round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0
+        prev_price_adp = round(m.get("prev_price_applied_u", 0) / m["prev_price_shown_u"] * 100, 1) if m.get("prev_price_shown_u") else 0
+        lines += ["", "*Reco Adoption Drop — by Type:*"]
+        all_recos = [
+            ("Price Recos", price_adp, prev_price_adp),
+        ] + [
+            (r["name"], r["adoption"], r["prev_adoption"])
+            for r in sorted(m["rest_reco_rows"], key=lambda r: r["adoption"] - r["prev_adoption"])
+        ]
+        for name, adp, prev_adp in all_recos:
+            d = round(adp - prev_adp, 1)
+            lines.append(f"  {name}: {_pct(adp)} (prev {_pct(prev_adp)}, {d:+.1f} pp)")
 
     lines += ["", "_Full report sent via email._"]
     return "\n".join(lines)
