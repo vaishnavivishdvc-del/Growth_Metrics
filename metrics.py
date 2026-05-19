@@ -94,12 +94,14 @@ def compute(fetched: list[dict]) -> dict:
     ]
     pill_click_rows = [
         {
-            "name": PILL_LABELS[e],
-            "clicked_u": _s(u0, e),
-            "clicked_t": _s(t0, e),
-            "prev_u":    _s(u1, e),
+            "name":         PILL_LABELS[e],
+            "clicked_u":    _s(u0, e),
+            "clicked_t":    _s(t0, e),
+            "prev_u":       _s(u1, e),
+            "shown_u":      _s(u0, PILLS_SHOWN[i]),
+            "prev_shown_u": _s(u1, PILLS_SHOWN[i]),
         }
-        for e in PILLS_CLICKED
+        for i, e in enumerate(PILLS_CLICKED)
     ]
 
     tot_pills_shown_u  = _sum(u0, PILLS_SHOWN)
@@ -155,6 +157,8 @@ def compute(fetched: list[dict]) -> dict:
     price_applied_u = _sum(u0, PRICE_RECOS_APPLIED)
     price_shown_t   = _sum(t0, PRICE_RECOS_SHOWN)
     price_applied_t = _sum(t0, PRICE_RECOS_APPLIED)
+    prev_price_shown_u  = _sum(u1, PRICE_RECOS_SHOWN)
+    prev_price_applied_u = _sum(u1, PRICE_RECOS_APPLIED)
 
     # ── Rest recos ────────────────────────────────────────────────────────────
     rest_reco_rows = []
@@ -233,9 +237,18 @@ def compute(fetched: list[dict]) -> dict:
         if _s(u0, applied_ev) > _s(u0, shown_ev) > 0:
             anomalies.append({"type": "funnel_inversion", "event": shown_ev})
 
+    from datetime import date as _date
+    LAUNCH = _date(2026, 4, 14)
+    try:
+        week_start = _date.fromisoformat(w0["from"])
+        n_baseline = (week_start - LAUNCH).days // 7
+    except Exception:
+        n_baseline = None
+
     return {
         "period_from": w0["from"],
         "period_to":   w0["to"],
+        "n_baseline":  n_baseline,
         # pills
         "pill_shown_rows":       pill_shown_rows,
         "pill_click_rows":       pill_click_rows,
@@ -257,8 +270,10 @@ def compute(fetched: list[dict]) -> dict:
         # recos
         "price_sub":             price_sub,
         "rest_reco_rows":        rest_reco_rows,
-        "price_shown_u":         price_shown_u,
-        "price_applied_u":       price_applied_u,
+        "price_shown_u":          price_shown_u,
+        "price_applied_u":        price_applied_u,
+        "prev_price_shown_u":     prev_price_shown_u,
+        "prev_price_applied_u":   prev_price_applied_u,
         "tot_reco_shown_u":      tot_reco_shown_u,
         "tot_reco_applied_u":    tot_reco_applied_u,
         "tot_reco_shown_t":      tot_reco_shown_t,
