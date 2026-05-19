@@ -367,25 +367,23 @@ Highlight any channel shift > 10% from its 7-day average with a bullet point.
 - Tables for all breakdowns; bullet points for interpretations (max 2 per section)
 - No filler words. Every sentence must carry a number or an action
 - **Gmail output**: Full report (all sections)
-- **Google Chat output**: KPI summary + Reco RCA (if drop). No anomaly alerts, no Z-scores, no baseline labels. Use this exact format:
+- **Google Chat output**: KPI summary + single biggest reco mover (if drop > 1 pp). No anomaly alerts, no Z-scores, no baseline labels. Use this exact format:
 
 ```
 *GC Brief — [Date Range]*
 
-Alerts CTR:     *X.X%*  [+/-X.X pp WoW]  [(+)/(~)/(-)]
-Filter CTR:     *X.X%*  [+/-X.X pp WoW]  [(+)/(~)/(-)]
-Reco Adoption:  *X.X%*  [+/-X.X pp WoW]  [(+)/(~)/(-)]
+🔔 Alerts CTR:    *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
+💊 Filter CTR:    *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
+📊 Reco Adoption: *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
 
 [Only if Reco Adoption dropped > 1 pp:]
-*Reco Adoption Drop — by Type:*
-  Price Recos: X.X% (prev X.X%, [+/-X.X pp])
-  [Reco Type]: X.X% (prev X.X%, [+/-X.X pp])
-  ...sorted worst first
+*Reco Adoption — by Type:*
+  🟢/🟡/🔴 [Reco Type with biggest absolute change]: *X.X%*  (+/-X.X pp WoW)
 
 _Full report sent via email._
 ```
 
-Status indicators: `(+)` = stable/up, `(~)` = mild drop (1–3 pp), `(-)` = significant drop (>3 pp).
+Status: 🟢 = stable/up, 🟡 = mild drop (1–3 pp), 🔴 = significant drop (>3 pp). All delta lines use `(+/-X.X pp WoW)` — no "prev X.X%" values in Chat output.
 
 ---
 

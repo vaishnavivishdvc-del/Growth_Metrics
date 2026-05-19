@@ -480,32 +480,33 @@ def build_chat_text(m: dict) -> str:
     reco_delta         = round(reco_adoption - prev_reco_adoption, 1)
 
     def _dp(d: float) -> str:
-        return f"{'+' if d >= 0 else ''}{d} pp"
+        return f"{'+' if d >= 0 else ''}{d} pp WoW"
 
     def _si(d: float) -> str:
-        return "(-)" if d < -3 else ("(~)" if d < -1 else "(+)")
+        return "🔴" if d < -3 else ("🟡" if d < -1 else "🟢")
 
     lines = [
         f"*GC Brief — {period}*",
         "",
-        f"Alerts CTR:     *{_pct(alert_ctr)}*  {_dp(alert_delta)} WoW  {_si(alert_delta)}",
-        f"Filter CTR:     *{_pct(filter_ctr)}*  {_dp(filter_delta)} WoW  {_si(filter_delta)}",
-        f"Reco Adoption:  *{_pct(reco_adoption)}*  {_dp(reco_delta)} WoW  {_si(reco_delta)}",
+        f"🔔 Alerts CTR:    *{_pct(alert_ctr)}*  ({_dp(alert_delta)})  {_si(alert_delta)}",
+        f"💊 Filter CTR:    *{_pct(filter_ctr)}*  ({_dp(filter_delta)})  {_si(filter_delta)}",
+        f"📊 Reco Adoption: *{_pct(reco_adoption)}*  ({_dp(reco_delta)})  {_si(reco_delta)}",
     ]
 
     if reco_delta < -1:
         price_adp = round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0
         prev_price_adp = round(m.get("prev_price_applied_u", 0) / m["prev_price_shown_u"] * 100, 1) if m.get("prev_price_shown_u") else 0
-        lines += ["", "*Reco Adoption Drop — by Type:*"]
-        all_recos = [
-            ("Price Recos", price_adp, prev_price_adp),
-        ] + [
-            (r["name"], r["adoption"], r["prev_adoption"])
-            for r in sorted(m["rest_reco_rows"], key=lambda r: r["adoption"] - r["prev_adoption"])
+        all_recos = [("Price Recos", price_adp, prev_price_adp)] + [
+            (r["name"], r["adoption"], r["prev_adoption"]) for r in m["rest_reco_rows"]
         ]
-        for name, adp, prev_adp in all_recos:
-            d = round(adp - prev_adp, 1)
-            lines.append(f"  {name}: {_pct(adp)} (prev {_pct(prev_adp)}, {d:+.1f} pp)")
+        biggest = max(all_recos, key=lambda x: abs(x[1] - x[2]))
+        name, adp, prev_adp = biggest
+        d = round(adp - prev_adp, 1)
+        lines += [
+            "",
+            f"*Reco Adoption — by Type:*",
+            f"  {_si(d)} {name}: *{_pct(adp)}*  ({_dp(d)})",
+        ]
 
     lines += ["", "_Full report sent via email._"]
     return "\n".join(lines)
