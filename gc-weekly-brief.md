@@ -378,7 +378,10 @@ Highlight any channel shift > 10% from its 7-day average with a bullet point.
 
 [Only if Reco Adoption dropped > 1 pp:]
 *Reco Adoption — by Type:*
-  🟢/🟡/🔴 [Reco Type with biggest absolute change]: *X.X%*  (+/-X.X pp WoW)
+  🟢/🟡/🔴 [Reco Type 1]: *X.X%*  (+/-X.X pp WoW)
+  🟢/🟡/🔴 [Reco Type 2]: *X.X%*  (+/-X.X pp WoW)
+  ... (all reco types)
+Biggest mover: [Reco Type] (+/-X.X pp WoW)
 
 _Full report sent via email._
 ```

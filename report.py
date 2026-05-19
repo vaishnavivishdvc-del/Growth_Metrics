@@ -499,14 +499,14 @@ def build_chat_text(m: dict) -> str:
         all_recos = [("Price Recos", price_adp, prev_price_adp)] + [
             (r["name"], r["adoption"], r["prev_adoption"]) for r in m["rest_reco_rows"]
         ]
+        lines += ["", "*Reco Adoption — by Type:*"]
+        for name, adp, prev_adp in all_recos:
+            d = round(adp - prev_adp, 1)
+            lines.append(f"  {_si(d)} {name}: *{_pct(adp)}*  ({_dp(d)})")
         biggest = max(all_recos, key=lambda x: abs(x[1] - x[2]))
-        name, adp, prev_adp = biggest
-        d = round(adp - prev_adp, 1)
-        lines += [
-            "",
-            f"*Reco Adoption — by Type:*",
-            f"  {_si(d)} {name}: *{_pct(adp)}*  ({_dp(d)})",
-        ]
+        bname, badp, bprev = biggest
+        bd = round(badp - bprev, 1)
+        lines.append(f"Biggest mover: {bname} ({bd:+.1f} pp WoW)")
 
     lines += ["", "_Full report sent via email._"]
     return "\n".join(lines)
