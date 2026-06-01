@@ -72,16 +72,20 @@ Execute when the user asks for the "GC Brief", "Growth Central report", "GC week
 - **Total Price Recos Applied** = sum of all four `_applied` price reco events
 - **Total Recos Shown** = Price Recos Shown + `gc_fa_recco_shown` + `gc_suppression_recco_shown` + `gc_nfbf_oos_recco_triggered`
 - **Total Recos Applied** = Price Recos Applied + `gc_fa_recco_applied` + `gc_suppression_recco_clicked` + `gc_nfbf_oos_recco_applied`
+- **Pill Engagement Rate** = Total Pills Clicked (events) ÷ Total Pills Impressions (events)
+- **Alert Engagement Rate** = Total Alert Clicks (events) ÷ Total Alerts Impressions (events)
+- **Alerts & Pills Engagement Rate** = (Total Alert Clicks events + Total Pills Clicked events) ÷ (Total Alerts Impressions events + Total Pills Impressions events)
+- **Reco Adoption Rate** = Total Recos Applied (events) ÷ Total Recos Shown (events)
 
 ### Date Window Rule
-- **All tables use the same fixed 7-day window: the last complete Monday–Sunday or the last 7 calendar days ending yesterday (e.g., May 2–May 8, both inclusive).**
-- Never mix date windows across tables. State the exact dates at the top of every report (e.g., "Period: May 2–May 8, 2026").
+- **All tables use the same fixed 7-day window: always the 7 calendar days ending yesterday (T−1). Example: if today is Jun 1, the window is May 25–May 31, both inclusive.**
+- Never mix date windows across tables. State the exact dates at the top of every report (e.g., "Period: May 25–May 31, 2026").
 - For MCP queries, use `dateRange: {type: "absolute", from: "YYYY-MM-DD", to: "YYYY-MM-DD"}` with `chartType: "bar"` to get a single deduplicated count across the full window (do NOT use line chart and sum rows).
 
 ### Metric Type Definitions
-- **Unique Sellers (Uniques):** Count of distinct sellers (by seller_id) who triggered an event at least once in the period. Use `math="unique"` in MCP queries. This answers: *how many sellers interacted with this feature?*
-- **Total Events:** Raw event fire count (including repeat triggers by the same seller). Use `math="total"` in MCP queries. This answers: *how intensively is the feature being used?*
-- **Both types are required in all tables.** Report Unique Sellers as the primary metric for reach/adoption; report Total Events as the secondary metric for depth/intensity. Where both diverge meaningfully (ratio > 2x), add a bullet calling out repeat engagement behavior.
+- **Total Events (Primary):** Raw event fire count (including repeat triggers by the same seller). Use `math="total"` in MCP queries. **All rate calculations (Pill Engagement, Alert Engagement, Alerts & Pills Engagement, Reco Adoption) use Total Events** in both numerator and denominator.
+- **Unique Sellers / # of Sellers (Secondary):** Count of distinct sellers who triggered the event at least once. Use `math="unique"` in MCP queries. Reported as **# Sellers** columns in all detailed tables for reach context and RCA diagnostics. Never use unique counts in rate calculations.
+- **Both types are required in all tables.** Events-based rates are the headline metric; # Sellers columns appear alongside for reach and RCA diagnostics. Where events/seller ratio > 5x, add a bullet noting high repeat-exposure intensity.
 
 ### Key Properties
 - **seller_id** (or equivalent): Unique seller identifier — use for deduplication across all unique counts
@@ -110,12 +114,13 @@ Execute when the user asks for the "GC Brief", "Growth Central report", "GC week
 - `gc_nfbf_oos_recco_triggered`, `gc_nfbf_oos_recco_applied` — unique AND total
 
 **D. Cumulative baseline — ALL weeks since launch (April 14, 2026):**
-- Fetch unique sellers for the following key rate metrics for **every prior week from April 14, 2026 up to (but not including) the current report window**, one `chartType: "bar"` query per week:
-  - Pill Click Rate: `gc_losing_imp_listings_filter_click` + `gc_losing_conv_listings_filter_click` (num) ÷ `gc_losing_imp_listings_filter_shown` + `gc_losing_conv_listings_filter_shown` (den)
-  - Alert CTR: `gc_impressions_alert_cta_click` + `gc_conversion_alert_cta_click` ÷ `gc_impressions_alert_shown` + `gc_conversion_alert_shown`
-  - Reco Adoption Rate: Total Recos Applied (unique) ÷ Total Recos Shown (unique)
-  - F-Assured CTR: `gc_fa_recco_applied` ÷ `gc_fa_recco_shown`
-  - Suppression CTR: `gc_suppression_recco_clicked` ÷ `gc_suppression_recco_shown`
+- Fetch **total events** (`math="total"`) for the following key rate metrics for **every prior week from April 14, 2026 up to (but not including) the current report window**, one `chartType: "bar"` query per week:
+  - Pill Engagement Rate: `gc_losing_imp_listings_filter_click` + `gc_losing_conv_listings_filter_click` (events, num) ÷ `gc_losing_imp_listings_filter_shown` + `gc_losing_conv_listings_filter_shown` (events, den)
+  - Alert Engagement Rate: `gc_impressions_alert_cta_click` + `gc_conversion_alert_cta_click` (events) ÷ `gc_impressions_alert_shown` + `gc_conversion_alert_shown` (events)
+  - Alerts & Pills Engagement Rate: (alert clicks events + pill clicks events) ÷ (alerts shown events + pills shown events)
+  - Reco Adoption Rate: Total Recos Applied (events) ÷ Total Recos Shown (events)
+  - F-Assured CTR: `gc_fa_recco_applied` (events) ÷ `gc_fa_recco_shown` (events)
+  - Suppression CTR: `gc_suppression_recco_clicked` (events) ÷ `gc_suppression_recco_shown` (events)
 - Compute `n_baseline = (this_week_start − 2026-04-14).days // 7` to know how many prior weeks exist.
 - **Week label lookup** (for context and pattern notes):
   - Week 1: Apr 14–20 | Week 2: Apr 21–27 | Week 3: Apr 28–May 4
@@ -136,12 +141,29 @@ from datetime import datetime, timedelta
 
 # All computations use the same 7-day window (e.g., May 2–May 8). Do NOT mix date ranges.
 
-# ── FUNNEL METRICS ───────────────────────────────────────────────────────────
-# For all stages, compute BOTH unique sellers and total events (same 7-day window)
-# events_per_seller = total_events / unique_sellers
-# Pill Click Rate = Total Pills Clicked (unique) / Total Pills Shown (unique)
-# Alert CTR = Total Alert Clicks (unique) / Total Alerts Shown (unique)
-# Reco CTR = Total Recos Applied (unique) / Total Recos Shown (unique)
+# ── ENGAGEMENT METRICS ───────────────────────────────────────────────────────
+# All rates use Total Events in both numerator and denominator.
+# Unique sellers (# sellers) are fetched separately for reach/RCA diagnostics only.
+# events_per_seller = total_events / unique_sellers  (intensity context, not used in rates)
+#
+# Pill Engagement Rate         = pill_clicks_total / pills_shown_total
+# Alert Engagement Rate        = alert_clicks_total / alerts_shown_total
+# Alerts & Pills Eng Rate      = (alert_clicks_total + pill_clicks_total) / (alerts_shown_total + pills_shown_total)
+# Reco Adoption Rate           = recos_applied_total / recos_shown_total
+#
+# RCA drill-down order (when any KPI rate drops, Z < -1.5 or WoW Δ < -1 pp):
+# For Alerts & Pills Engagement:
+#   1. Compare Alert Engagement Rate vs Pill Engagement Rate — identify which sub-component dropped
+#   2a. If shown_total dropped >10% WoW → reach issue (trigger/eligibility change)
+#   2b. If click_total dropped but shown_total stable → engagement issue (sellers not acting)
+#   2c. If both stable but rate dropped → check # sellers shown: cohort composition shift
+#   3. Sub-breakdown: alerts → Impressions Alert vs Conversion Alert; pills → Losing Imp vs Losing Conv
+# For Reco Adoption:
+#   1. Compare adoption rate by reco type (Price Recos, FA, Suppression, NFBF OOS)
+#   2a. If shown_total dropped >10% WoW → reach/eligibility issue
+#   2b. If applied_total dropped but shown stable → engagement drop
+#   2c. If both stable → check # sellers shown: cohort composition shift
+#   3. For Price Recos: sub-breakdown by Buy Now / Inc Vis / Conv Price / Value Tag
 
 # ── NEGATIVE SIGNALS (Z-SCORE) ───────────────────────────────────────────────
 # BASELINE: All weeks from launch (April 14, 2026) up to (not including) current week.
@@ -159,16 +181,21 @@ from datetime import datetime, timedelta
 #   n≥6 (Wk 7+): Baseline increasingly reliable; remove caution note when n≥8
 #
 # PATTERN LOG (update each week — used by seasonality guardrails):
+# ⚠️ BASELINE TRANSITION (W7): Rates switched from unique basis to events basis.
+#    W2–W6 entries below are UNIQUE-based. Re-fetch W1–W6 total events to rebuild
+#    events-based Z-score baseline. Until then: report WoW deltas only and note
+#    "⚠️ Baseline transition — Z-scores paused" in the Negative Signals table.
 # W1 (Apr 14-20): Establishing baseline — no prior data
-# W2 (Apr 21-27): Pill CTR 13.5%, Alert CTR 6.4%, Reco Adoption ~baseline
-# W3 (Apr 28-May 4): Pill CTR 12.2%, Alert CTR 6.0%, FA CTR 26.5%
-# W4 (May 5-11):  Pill CTR 12.9%, Alert CTR 6.1%, FA CTR 26.2%, Supp CTR 15.2%
-# W5 (May 12-18): Pill CTR 12.3%, Alert CTR 6.1%, FA CTR 20.7% ← collapse, Supp CTR 11.1% ← collapse
+# W2 (Apr 21-27): [unique] Pill CTR 13.5%, Alert CTR 6.4%
+# W3 (Apr 28-May 4): [unique] Pill CTR 12.2%, Alert CTR 6.0%, FA CTR 26.5%, Supp CTR 18.4%
+# W4 (May 5-11):  [unique] Pill CTR 12.9%, Alert CTR 6.1%, FA CTR 26.2%, Supp CTR 15.2%
+# W5 (May 12-18): [unique] Pill CTR 12.3%, Alert CTR 6.1%, FA CTR 20.7% ← collapse, Supp CTR 11.1% ← collapse
 # NOTE W5: FA reach halved (821→463 shown). Suppression adoption also dropped.
 #          NFBF OOS applied doubled (7→14). Conv Alert CTR improved (+2pp).
-# → Pattern emerging: Pill CTR range 12.2–13.5%, Alert CTR range 6.0–6.4% (stable).
-#   FA CTR 25–27% is the healthy range; anything below 22% is anomalous.
-#   Suppression CTR 15–18% is the healthy range; below 12% is anomalous.
+# W6 (May 19-25): [unique] Pill CTR 12.1%, Alert CTR 5.85%, FA CTR 26.6%, Supp CTR 19.3%
+# W7 (May 26-Jun 1): [EVENTS] A+P Eng 2.9%, Pill Eng 5.2%, Alert Eng 2.3%, Reco Adoption 1.0%, FA CTR 2.4%, Supp CTR 1.7%
+# NOTE W7: FA reach collapsed again (1,004→265 shown, -74%). Losing Imp pill CTR 7.8% (-3pp). Value Tag breakout (6.8%).
+# → Events-based healthy ranges: being established from W7 onwards (n≥3 needed for Z-scores = W9+).
 #
 # ── SEASONALITY GUARDRAILS (run before flagging any anomaly) ──────────────────
 # 1. DIRECTION CONSISTENCY CHECK:
@@ -204,12 +231,12 @@ from datetime import datetime, timedelta
 #    fixed 7-day windows). Safe to ignore for weekly aggregates.
 
 # ── FEATURE TRACTION (RANKING) ───────────────────────────────────────────────
-# Rank recos by applied unique sellers (7-day window):
+# Rank recos by applied events (7-day window):
 #   Price Recos (all 4 clubbed), F-Assured, Suppression, NFBF OOS
-# Rank pills by clicked unique sellers (7-day window):
-#   Losing Imp, Losing Conv, Low Conv
-# Include: unique_7d, total_events_7d, adoption_pct, wow_change_pct
-# Bold top performer; omit any with 0 unique sellers
+# Rank pills by clicked events (7-day window):
+#   Losing Imp, Losing Conv
+# Include per row: applied_events, # sellers applied, shown_events, # sellers shown, adoption_pct (events), wow_change_pp
+# Bold top performer; omit any reco/pill with 0 applied/clicked events
 ```
 
 ---
@@ -225,26 +252,38 @@ The LLM synthesizes all Python outputs into the report below. Do **NOT** list ra
 ---
 
 ### � KPI SUMMARY CARDS
-*Always the first thing in the report. Render as a 3-column card table.*
+*Always the first thing in the report. Render as a 2-column card table. All rates use Total Events basis.*
 
-| | 🔔 GC Alerts Click Rate | 💊 Filter Click Rate | ✅ GC Reco Adoption Rate |
-|---|---|---|---|
-| **This week** | X% | X% | X% |
-| **Last week** | X% | X% | X% |
-| **WoW Δ (pp)** | +/- X pp | +/- X pp | +/- X pp |
-| **Status** | 🟢 / 🟡 / 🔴 | 🟢 / 🟡 / 🔴 | 🟢 / 🟡 / 🔴 |
+| | 🔔💊 Alerts & Pills Engagement Rate | ✅ GC Reco Adoption Rate |
+|---|---|---|
+| **This week** | X% | X% |
+| **Last week** | X% | X% |
+| **WoW Δ (pp)** | +/- X pp | +/- X pp |
+| **Status** | 🟢 / 🟡 / 🔴 | 🟢 / 🟡 / 🔴 |
 
 **Definitions:**
-- **GC Alerts Click Rate** = unique sellers who clicked any alert CTA ÷ unique sellers shown any alert
-- **Filter Click Rate** = unique sellers who clicked any pill filter ÷ unique sellers shown any pill
-- **GC Reco Adoption Rate** = unique sellers who applied any reco ÷ unique sellers shown any reco
+- **Alerts & Pills Engagement Rate** = (total alert clicks events + total pill clicks events) ÷ (total alerts shown events + total pills shown events)
+- **GC Reco Adoption Rate** = total recos applied events ÷ total recos shown events
 
 **Status thresholds:** 🟢 WoW Δ > -1 pp | 🟡 -3 pp ≤ Δ ≤ -1 pp | 🔴 Δ < -3 pp or Z < -2
 
-**RCA Drill-down (include only if any card is � or 🔴):**
-- **Alerts CTR drop** → break down by Impressions Alert CTR vs Conversion Alert CTR; identify which type drove the fall
-- **Filter CTR drop** → break down by Losing Imp pill CTR vs Losing Conv pill CTR; identify which pill drove the fall
-- **Reco Adoption drop** → break down by reco type (Price Recos, F-Assured, Suppression, NFBF OOS); identify which reco type(s) saw the largest adoption decline
+**RCA Drill-down (include only if any card is 🟡 or 🔴):**
+
+**If Alerts & Pills Engagement drops:**
+- **Step 1:** Compare Alert Engagement Rate vs Pill Engagement Rate independently (events basis) — identify which sub-component dropped more.
+- **Step 2** (for the dropped component):
+  - If **shown events ↓ >10% WoW** → reach issue: trigger/eligibility change. Check alert thresholds or pill display logic.
+  - If **click events ↓ but shown events stable** → engagement issue: sellers are seeing but not acting.
+  - If **both stable but rate dropped** → check **# sellers shown**: if unique seller count fell, a different (less engaged) cohort entered. Run Channel breakdown.
+- **Step 3:** Sub-breakdown — for alerts: Impressions Alert Engagement vs Conversion Alert Engagement; for pills: Losing Imp Engagement vs Losing Conv Engagement.
+
+**If Reco Adoption drops:**
+- **Step 1:** Break down adoption rate by reco type (Price Recos, F-Assured, Suppression, NFBF OOS) — identify which type's events-based adoption fell.
+- **Step 2** (for the dropped reco type):
+  - If **shown events ↓ >10% WoW** → reach/eligibility issue (e.g., FA eligibility job change).
+  - If **applied events ↓ but shown stable** → engagement drop for that reco type.
+  - If **both stable but rate dropped** → check **# sellers shown**: cohort composition shift.
+- **Step 3:** For Price Recos: sub-breakdown by Buy Now / Inc Vis / Conv Price / Value Tag.
 
 Follow the card table with 1–2 plain-language bullets summarising the week's headline and pointing to any drop.
 
@@ -252,39 +291,32 @@ Follow the card table with 1–2 plain-language bullets summarising the week's h
 
 ### 🔔 ALERT METRICS — [Period: STATE EXACT DATES]
 
-**Unique Sellers & CTR:**
-| Alert Type | Shown (Unique) | Shown (Events) | Clicked (Unique) | Clicked (Events) | CTR (Unique) | Prev 7d CTR | Δ pp |
+| Alert Type | Shown (Events) | # Sellers Shown | Clicked (Events) | # Sellers Clicked | CTR (Events) | Prev 7d CTR | Δ pp |
 |---|---|---|---|---|---|---|---|
 | Impressions Alert | | | | | | | |
 | Conversion Alert | | | | | | | |
 | **Total Alerts** | | | | | | | |
 
-Follow with 1–2 callout bullets: flag any CTR drop > 1 pp, note if one alert type is significantly outperforming the other.
+Follow with 1–2 callout bullets: flag CTR (events) drop > 1 pp; if shown events are stable but # sellers shown dropped, call out cohort composition shift.
 
 ---
 
 ### 💊 PILL METRICS — [Same 7-day window]
 
-**Unique Sellers:**
-| Stage | This 7 Days | Prev 7 Days | WoW % | Conversion |
-|---|---|---|---|---|
-| Pills Shown (Reach) | | | | 100% |
-| Pills Clicked | | | | X% of pills shown |
+| Pill Type | Shown (Events) | # Sellers Shown | Clicked (Events) | # Sellers Clicked | CTR (Events) | Prev 7d CTR | Δ pp |
+|---|---|---|---|---|---|---|---|
+| Losing Impressions | | | | | | | |
+| Losing Conversions | | | | | | | |
+| **Total Pills** | | | | | | | |
 
-**Total Events:**
-| Stage | This 7 Days | Prev 7 Days | WoW % | Events/Seller |
-|---|---|---|---|---|
-| Pills Shown (Impressions) | | | | |
-| Pills Clicked (Total Clicks) | | | | |
-
-Follow with 1–2 callout bullets: flag reach change > 5% WoW or click rate change > 1 pp.
+Follow with 1–2 callout bullets: flag shown events WoW drop > 10% (reach issue) or CTR drop > 1 pp (engagement issue); if shown events are stable but # sellers shown dropped, call out cohort composition shift.
 
 ---
 
 ### 🏆 FEATURE TRACTION
 
 **Reco Type Ranking — [Same 7-day window]**
-| Rank | Reco Type | Sellers Applied | Total Events | Events/Seller | Sellers Shown | Adoption % | Prev 7d Adoption % | WoW Change |
+| Rank | Reco Type | Applied (Events) | # Sellers Applied | Shown (Events) | # Sellers Shown | Adoption % (Events) | Prev 7d Adoption % | WoW Change pp |
 |---|---|---|---|---|---|---|---|---|
 | 1 | **Price Recos (All)** | | | | | | | |
 | 2 | F-Assured | | | | | | | |
@@ -292,7 +324,7 @@ Follow with 1–2 callout bullets: flag reach change > 5% WoW or click rate chan
 | 4 | NFBF OOS | | | | | | | |
 
 Price Reco Sub-breakdown (always show; bold top-adopting sub-type):
-| Sub-type | Shown (Unique) | Shown (Events) | Sellers Applied | Total Events | Adoption |
+| Sub-type | Shown (Events) | # Sellers Shown | Applied (Events) | # Sellers Applied | Adoption % (Events) |
 |---|---|---|---|---|---|
 | Buy Now | | | | | |
 | Increase Visibility | | | | | |
@@ -300,28 +332,29 @@ Price Reco Sub-breakdown (always show; bold top-adopting sub-type):
 | Value Tag | | | | | |
 
 **Pill Click Ranking — [Same 7-day window]**
-| Rank | Pill | Unique Sellers | Total Clicks | Clicks/Seller | Prev 7d Unique | WoW Change % |
-|---|---|---|---|---|---|---|
-| 1 | | | | | | |
-| 2 | | | | | | |
-| 3 | | | | | | |
+| Rank | Pill | Clicked (Events) | # Sellers Clicked | Shown (Events) | CTR (Events) | Prev 7d CTR | WoW Change pp |
+|---|---|---|---|---|---|---|---|
+| 1 | | | | | | | |
+| 2 | | | | | | | |
 
-Omit any pill or reco type with 0 unique sellers. **Bold the top performer in each table.**
-Follow with 1–2 bullets: call out the top reco, any adoption drop > 5 pp, or any reco with shown > 0 and applied = 0.
+Omit any pill or reco type with 0 applied/clicked events. **Bold the top performer in each table.**
+Follow with 1–2 bullets: call out the top reco, any adoption drop > 5 pp, or any reco with shown events > 0 and applied events = 0.
 
 ---
 
 ### ⚠️ NEGATIVE SIGNALS
 
+*All rates in this table use Total Events basis (consistent with KPI cards). If baseline transition is in progress (events-based n < 3), replace Z-score cells with "⚠️ Paused" and report WoW Δ only.*
+
 **Engagement Signal Health Table — [Same 7-day window]**
-| Signal | This 7 Days | Prev 4-Wk Avg | Std Dev | Z-score | Status |
+| Signal | This 7 Days | Baseline Mean | Std Dev | Z-score | Status |
 |---|---|---|---|---|---|
-| Pill Engagement Rate (clicks/shown) | | | | | 🟢 / 🟡 / 🔴 |
-| Impressions Alert CTR | | | | | 🟢 / 🟡 / 🔴 |
-| Conversion Alert CTR | | | | | 🟢 / 🟡 / 🔴 |
-| Overall Reco CTR (applied/shown) | | | | | 🟢 / 🟡 / 🔴 |
-| Price Reco CTR (clubbed) | | | | | 🟢 / 🟡 / 🔴 |
-| F-Assured Reco CTR | | | | | 🟢 / 🟡 / 🔴 |
+| Alerts & Pills Engagement Rate | | | | | 🟢 / 🟡 / 🔴 |
+| Pill Engagement Rate (events) | | | | | 🟢 / 🟡 / 🔴 |
+| Alert Engagement Rate (events) | | | | | 🟢 / 🟡 / 🔴 |
+| Overall Reco Adoption (events) | | | | | 🟢 / 🟡 / 🔴 |
+| F-Assured Reco CTR (events) | | | | | 🟢 / 🟡 / 🔴 |
+| Suppression Reco CTR (events) | | | | | 🟢 / 🟡 / 🔴 |
 
 Status: 🟢 Z > -1.5 | 🟡 -2 ≤ Z ≤ -1.5 | 🔴 Z < -2 (critical)
 
@@ -367,21 +400,18 @@ Highlight any channel shift > 10% from its 7-day average with a bullet point.
 - Tables for all breakdowns; bullet points for interpretations (max 2 per section)
 - No filler words. Every sentence must carry a number or an action
 - **Gmail output**: Full report (all sections)
-- **Google Chat output**: KPI summary + single biggest reco mover (if drop > 1 pp). No anomaly alerts, no Z-scores, no baseline labels. Use this exact format:
+- **Google Chat output**: KPI summary cards only + one direct reason line per 🟡/🔴 signal or reach anomaly. No RCA steps, no sub-breakdowns, no Z-scores, no baseline labels. Use this exact format:
 
 ```
 *GC Brief — [Date Range]*
 
-🔔 Alerts CTR:    *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
-💊 Filter CTR:    *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
-📊 Reco Adoption: *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
+🔔💊 Alerts & Pills: *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
+� Reco Adoption:    *X.X%*  (+/-X.X pp WoW)  🟢/🟡/🔴
 
-[Only if Reco Adoption dropped > 1 pp:]
-*Reco Adoption — by Type:*
-  🟢/🟡/🔴 [Reco Type 1]: *X.X%*  (+/-X.X pp WoW)
-  🟢/🟡/🔴 [Reco Type 2]: *X.X%*  (+/-X.X pp WoW)
-  ... (all reco types)
-Biggest mover: [Reco Type] (+/-X.X pp WoW)
+[One line per /🔴 signal or reach anomaly — state the direct cause only, no steps:]
+⚠️ [Metric]: [number] — [one sentence: what dropped / what caused it]
+
+✅ All signals healthy.  ← use only if no 🟡/🔴 and no anomalies
 
 _Full report sent via email._
 ```
@@ -405,7 +435,7 @@ Status: 🟢 = stable/up, 🟡 = mild drop (1–3 pp), 🔴 = significant drop (
 - **Variance Inflation Check (early weeks only):** With n<6 baseline weeks, std dev can be inflated by a single outlier. If one baseline week is >2× the mean of the others, exclude it from the std dev calculation and note the exclusion. This check becomes unnecessary once n≥8.
 - **Pattern Log Update:** After each report, append a one-line summary to the Pattern Log in Step 2 (e.g., "W6 (May 19-25): Pill CTR X%, Alert CTR X%, FA CTR X%"). This is the primary mechanism for tracking seasonality over time.
 
-**True Uniques:** Never sum daily unique counts to get weekly uniques. Always use native Mixpanel bar-chart aggregation with `chartType: "bar"` for the full 7-day window.
+**Correct Aggregation:** For both total events and unique sellers, always use native Mixpanel bar-chart aggregation with `chartType: "bar"` for the full 7-day window (never use line chart and sum rows). Never sum daily unique counts to get weekly uniques.
 
 **Deduplication:** Aggregate all user-level metrics by seller_id. If seller_id is missing on an event, flag it in Anomalies.
 
