@@ -10,12 +10,13 @@ Two batch calls per window:
 import json
 import logging
 import time
+from calendar import monthrange
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 
 import requests
 
-from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS
+from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS, LAUNCH_DATE, TRAFFIC_EVENT
 
 log = logging.getLogger(__name__)
 
@@ -83,6 +84,42 @@ function main() {{
 }}"""
     rows = _jql(script)
     return {r["key"][0]: r["value"] for r in rows}
+
+
+def fetch_traffic_mau() -> dict[str, int]:
+    """
+    Unique sellers for Traffic_Report_Visit per complete calendar month since
+    LAUNCH_DATE, up to (but not including) the current partial month.
+    Returns e.g. {"2026-04": 50794, "2026-05": 72665, "2026-06": 77279}.
+    """
+    today = date.today()
+    selector = json.dumps([{"event": TRAFFIC_EVENT}])
+    script_tpl = """
+function main() {{
+  return Events({{
+    from_date: '{from_date}',
+    to_date:   '{to_date}',
+    event_selectors: {sel}
+  }}).groupByUser(['name'], mixpanel.reducer.any())
+  .groupBy(['key.1'], mixpanel.reducer.count());
+}}"""
+
+    monthly: dict[str, int] = {}
+    yr, mo = LAUNCH_DATE.year, LAUNCH_DATE.month
+
+    while (yr, mo) < (today.year, today.month):
+        start = LAUNCH_DATE if (yr == LAUNCH_DATE.year and mo == LAUNCH_DATE.month) else date(yr, mo, 1)
+        end   = date(yr, mo, monthrange(yr, mo)[1])
+        rows  = _jql(script_tpl.format(from_date=start, to_date=end, sel=selector))
+        monthly[f"{yr}-{mo:02d}"] = next(
+            (r["value"] for r in rows if r["key"][0] == TRAFFIC_EVENT), 0
+        )
+        log.info("Traffic MAU %s-%02d: %d unique sellers", yr, mo, monthly[f"{yr}-{mo:02d}"])
+        mo += 1
+        if mo > 12:
+            yr, mo = yr + 1, 1
+
+    return monthly
 
 
 def get_windows(n_weeks: int = 5) -> list[tuple[str, str]]:

@@ -6,7 +6,7 @@ build(m)  → {"subject": str, "html": str, "chat_text": str}
 from __future__ import annotations
 from datetime import date as _date
 
-LAUNCH_DATE = _date(2026, 4, 14)
+from config import BASELINE_DATE
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -147,102 +147,124 @@ def _reco_callout(m: dict) -> str:
 
 # ── KPI summary cards ─────────────────────────────────────────────────────────
 
-def _kpi_cards(m: dict) -> str:
-    alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
-    prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
-    alert_delta    = round(alert_ctr - prev_alert_ctr, 1)
+def _status_icon(d: float, is_pct_change: bool = False) -> tuple[str, str]:
+    """Return (emoji, css_class) for a WoW delta. is_pct_change=True for traffic %."""
+    if is_pct_change:
+        if d < -15: return ("🔴", "red")
+        if d < -5:  return ("🟡", "warn")
+        return ("🟢", "ok")
+    if d < -3: return ("🔴", "red")
+    if d < -1: return ("🟡", "warn")
+    return ("🟢", "ok")
 
-    filter_ctr      = m["pill_click_rate"]
-    prev_filter_ctr = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
-    filter_delta    = round(filter_ctr - prev_filter_ctr, 1)
+
+def _kpi_cards(m: dict) -> str:
+    ap_eng        = m["ap_eng_rate"]
+    prev_ap_eng   = m["prev_ap_eng_rate"]
+    ap_delta      = m["ap_eng_delta"]
 
     reco_adoption      = round(m["tot_reco_applied_u"] / m["tot_reco_shown_u"] * 100, 1) if m["tot_reco_shown_u"] else 0
     prev_reco_adoption = round(m["prev_reco_applied_u"] / m["prev_reco_shown_u"] * 100, 1) if m.get("prev_reco_shown_u") else 0
     reco_delta         = round(reco_adoption - prev_reco_adoption, 1)
 
+    traffic_u0  = m["traffic_u0"]
+    traffic_u1  = m["traffic_u1"]
+    traffic_wow = m["traffic_wow_pct"]
+    traffic_mau = m["traffic_mau"]
+    mau_label   = f"MAU ({', '.join(m['traffic_mau_months'])})" if m.get("traffic_mau_months") else "MAU"
+
     def _dp(d: float) -> str:
         return f"{'+' if d >= 0 else ''}{d} pp"
 
-    def _si(d: float):
-        if d < -3:  return ("🔴", "red")
-        if d < -1:  return ("🟡", "warn")
-        return ("🟢", "ok")
+    t_icon, t_cls = _status_icon(traffic_wow, is_pct_change=True)
+    a_icon, a_cls = _status_icon(ap_delta)
+    r_icon, r_cls = _status_icon(reco_delta)
 
-    a_icon, a_cls = _si(alert_delta)
-    f_icon, f_cls = _si(filter_delta)
-    r_icon, r_cls = _si(reco_delta)
+    c  = "border:1px solid #e0e0e0;padding:8px 12px;font-size:13px;"
+    ch = "background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;"
 
-    c = "border:1px solid #e0e0e0;padding:8px 12px;font-size:13px;"
     card = (
         '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">'
         '<thead><tr>'
-        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;width:20%;"></th>'
-        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">Alerts Click Rate</th>'
-        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">Filter Click Rate</th>'
-        '<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;">Reco Adoption Rate</th>'
+        f'<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;width:18%;"></th>'
+        f'<th style="{ch}">Traffic Report Visits</th>'
+        f'<th style="{ch}">A&amp;P Engagement Rate</th>'
+        f'<th style="{ch}">Reco Adoption Rate</th>'
         '</tr></thead><tbody>'
         f'<tr><td style="{c}font-weight:bold;">This week</td>'
-        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(alert_ctr)}</td>'
-        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(filter_ctr)}</td>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_fmt(traffic_u0)} sellers</td>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(ap_eng)}</td>'
         f'<td style="{c}text-align:center;font-weight:bold;">{_pct(reco_adoption)}</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">Last week</td>'
-        f'<td style="{c}text-align:center;">{_pct(prev_alert_ctr)}</td>'
-        f'<td style="{c}text-align:center;">{_pct(prev_filter_ctr)}</td>'
+        f'<td style="{c}text-align:center;">{_fmt(traffic_u1)} sellers</td>'
+        f'<td style="{c}text-align:center;">{_pct(prev_ap_eng)}</td>'
         f'<td style="{c}text-align:center;">{_pct(prev_reco_adoption)}</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">WoW change</td>'
-        f'<td style="{c}text-align:center;">{_dp(alert_delta)}</td>'
-        f'<td style="{c}text-align:center;">{_dp(filter_delta)}</td>'
+        f'<td style="{c}text-align:center;">{traffic_wow:+.1f}%</td>'
+        f'<td style="{c}text-align:center;">{_dp(ap_delta)}</td>'
         f'<td style="{c}text-align:center;">{_dp(reco_delta)}</td></tr>'
+        f'<tr><td style="{c}font-weight:bold;">{mau_label}</td>'
+        f'<td style="{c}text-align:center;">{_fmt(traffic_mau) if traffic_mau else "—"}</td>'
+        f'<td style="{c}text-align:center;">—</td>'
+        f'<td style="{c}text-align:center;">—</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">Status</td>'
+        f'<td style="{c}text-align:center;"><span class="{t_cls}">{t_icon}</span></td>'
         f'<td style="{c}text-align:center;"><span class="{a_cls}">{a_icon}</span></td>'
-        f'<td style="{c}text-align:center;"><span class="{f_cls}">{f_icon}</span></td>'
         f'<td style="{c}text-align:center;"><span class="{r_cls}">{r_icon}</span></td></tr>'
         '</tbody></table>'
+        '<p style="font-size:11px;color:#888;">Definitions: A&amp;P Engagement = (unique alert clickers + unique pill clickers) ÷ (unique alert viewers + unique pill viewers). '
+        'Reco Adoption = unique sellers applied any reco ÷ unique sellers shown any reco. All rates: unique sellers basis.</p>'
     )
 
     rca_parts = []
 
-    if alert_delta < -1:
+    if ap_delta < -1:
+        # Identify whether alerts or pills drove the drop
+        alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
+        prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
+        pill_ctr       = m["pill_click_rate"]
+        prev_pill_ctr  = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
+
+        # Denominator vs Numerator analysis
+        shown_wow  = round((m["ap_shown_u"] - (m["prev_pills_shown_u"] + m["prev_alert_shown_u"])) / (m["prev_pills_shown_u"] + m["prev_alert_shown_u"]) * 100, 1) if (m["prev_pills_shown_u"] + m["prev_alert_shown_u"]) else 0
+        click_wow  = round((m["ap_click_u"] - (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"])) / (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"]) * 100, 1) if (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"]) else 0
+
+        if shown_wow < -10:
+            driver = f"Denominator-driven (reach): shown unique sellers fell {shown_wow:+.1f}% WoW — trigger/eligibility change suspected."
+        elif click_wow < -10:
+            driver = f"Numerator-driven (engagement): shown stable, but clicks fell {click_wow:+.1f}% WoW — sellers seeing but not acting."
+        else:
+            driver = f"Combined: shown {shown_wow:+.1f}% WoW, clicks {click_wow:+.1f}% WoW."
+
         rca_tbl = [[r["name"], _fmt(r["shown_u"]), _fmt(r["shown_t"]),
                     _fmt(r["clicked_u"]), _fmt(r["clicked_t"]),
                     _pct(r["ctr"]), _pct(r["prev_ctr"]), f"{r['delta_pp']:+.1f} pp"]
                    for r in m["alert_rows"]]
         rca_parts.append(
-            "<h3>Alert CTR Drop — RCA by Alert Type</h3>"
+            f"<h3>A&amp;P Engagement Drop — RCA</h3>"
+            f"<p><b>Driver:</b> {driver}</p>"
+            f"<p>Alert CTR: {_pct(alert_ctr)} ({alert_ctr - prev_alert_ctr:+.1f} pp) | "
+            f"Pill CTR: {_pct(pill_ctr)} ({pill_ctr - prev_pill_ctr:+.1f} pp)</p>"
             + _tbl(["Alert Type", "Shown (Unique)", "Shown (Events)",
-                    "Clicked (Unique)", "Clicked (Events)", "CTR", "Prev 7d CTR", "Δ pp"], rca_tbl)
+                    "Clicked (Unique)", "Clicked (Events)", "CTR", "Prev CTR", "Δ pp"], rca_tbl)
         )
 
-    if filter_delta < -1:
-        rca_tbl = []
-        for r in m["pill_click_rows"]:
-            shown = r.get("shown_u", 0)
-            prev_shown = r.get("prev_shown_u", 0)
-            if shown > 0:
-                this_ctr = round(r["clicked_u"] / shown * 100, 1)
-                prev_ctr = round(r["prev_u"] / prev_shown * 100, 1) if prev_shown else 0
-                rca_tbl.append([r["name"], _fmt(shown), _fmt(r["clicked_u"]),
-                                _pct(this_ctr), f"{round(this_ctr - prev_ctr, 1):+.1f} pp"])
-        if rca_tbl:
-            rca_parts.append(
-                "<h3>Filter CTR Drop — RCA by Pill Type</h3>"
-                + _tbl(["Pill", "Shown (Unique)", "Clicked (Unique)", "CTR", "Δ pp vs prev wk"], rca_tbl)
-            )
-
     if reco_delta < -1:
-        price_adp = round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0
+        price_adp      = round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0
         prev_price_adp = round(m.get("prev_price_applied_u", 0) / m["prev_price_shown_u"] * 100, 1) if m.get("prev_price_shown_u") else 0
         rca_tbl = [
             ["Price Recos (All)", _fmt(m["price_shown_u"]), _fmt(m["price_applied_u"]),
-             _pct(price_adp), f"{round(price_adp - prev_price_adp, 1):+.1f} pp"]
+             _pct(price_adp), f"{round(price_adp - prev_price_adp, 1):+.1f} pp",
+             "Den" if m["price_shown_u"] < m.get("prev_price_shown_u", m["price_shown_u"]) * 0.9 else "Num/Rate"]
         ] + [
             [r["name"], _fmt(r["shown_u"]), _fmt(r["applied_u"]),
-             _pct(r["adoption"]), f"{round(r['adoption'] - r['prev_adoption'], 1):+.1f} pp"]
+             _pct(r["adoption"]), f"{round(r['adoption'] - r['prev_adoption'], 1):+.1f} pp",
+             "Den" if r["shown_u"] < r.get("prev_shown_u", r["shown_u"]) * 0.8 else "Num/Rate"]
             for r in m["rest_reco_rows"]
         ]
         rca_parts.append(
             "<h3>Reco Adoption Drop — RCA by Reco Type</h3>"
-            + _tbl(["Reco Type", "Sellers Shown", "Sellers Applied", "Adoption %", "Δ pp vs prev wk"], rca_tbl)
+            + _tbl(["Reco Type", "Sellers Shown", "Sellers Applied", "Adoption %", "Δ pp", "Driver"], rca_tbl)
         )
 
     return card + "\n".join(rca_parts)
@@ -395,8 +417,12 @@ def build_html(m: dict) -> str:
         anomaly_html = "<p><em>No anomalies detected this week.</em></p>"
 
     n = m.get("n_baseline")
-    baseline_label = f"Based on {n}-week cumulative baseline (since Apr 14, 2026)" if isinstance(n, int) and n > 0 else "Baseline (establishing)"
-    week_label = f"Week {n + 1} of tracking" if isinstance(n, int) else "Weekly Brief"
+    baseline_label = (
+        f"Based on {n}-week cumulative baseline (since Jun 17, 2026)"
+        if isinstance(n, int) and n > 0
+        else "Baseline establishing — WoW comparison used until ≥4 weeks of data"
+    )
+    week_label = f"Week {n + 1} since Jun 17" if isinstance(n, int) else "Weekly Brief"
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -467,31 +493,41 @@ def build_html(m: dict) -> str:
 def build_chat_text(m: dict) -> str:
     period = f"{m['period_from']} – {m['period_to']}"
 
-    alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
-    prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
-    alert_delta    = round(alert_ctr - prev_alert_ctr, 1)
+    traffic_u0  = m["traffic_u0"]
+    traffic_wow = m["traffic_wow_pct"]
 
-    filter_ctr      = m["pill_click_rate"]
-    prev_filter_ctr = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
-    filter_delta    = round(filter_ctr - prev_filter_ctr, 1)
+    ap_eng    = m["ap_eng_rate"]
+    ap_delta  = m["ap_eng_delta"]
 
     reco_adoption      = round(m["tot_reco_applied_u"] / m["tot_reco_shown_u"] * 100, 1) if m["tot_reco_shown_u"] else 0
     prev_reco_adoption = round(m["prev_reco_applied_u"] / m["prev_reco_shown_u"] * 100, 1) if m.get("prev_reco_shown_u") else 0
     reco_delta         = round(reco_adoption - prev_reco_adoption, 1)
 
-    def _dp(d: float) -> str:
-        return f"{'+' if d >= 0 else ''}{d} pp WoW"
+    def _dp(d: float, unit: str = "pp") -> str:
+        return f"{'+' if d >= 0 else ''}{d} {unit} WoW"
 
-    def _si(d: float) -> str:
+    def _si_pp(d: float) -> str:
         return "🔴" if d < -3 else ("🟡" if d < -1 else "🟢")
 
+    def _si_pct(d: float) -> str:
+        return "🔴" if d < -15 else ("🟡" if d < -5 else "🟢")
+
     lines = [
-        f"*GC Brief — {period}*",
+        f"*📊 GC Brief — {period}*",
         "",
-        f"🔔 Alerts CTR:    *{_pct(alert_ctr)}*  ({_dp(alert_delta)})  {_si(alert_delta)}",
-        f"💊 Filter CTR:    *{_pct(filter_ctr)}*  ({_dp(filter_delta)})  {_si(filter_delta)}",
-        f"📊 Reco Adoption: *{_pct(reco_adoption)}*  ({_dp(reco_delta)})  {_si(reco_delta)}",
+        f"📈 Traffic Visits:    *{_fmt(traffic_u0)} sellers*  ({_dp(traffic_wow, '%')})  {_si_pct(traffic_wow)}",
+        f"💡 A&P Engagement:  *{_pct(ap_eng)}*  ({_dp(ap_delta)})  {_si_pp(ap_delta)}",
+        f"✅ Reco Adoption:    *{_pct(reco_adoption)}*  ({_dp(reco_delta)})  {_si_pp(reco_delta)}",
     ]
+
+    if ap_delta < -1:
+        alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
+        prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
+        pill_ctr      = m["pill_click_rate"]
+        prev_pill_ctr = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
+        lines += ["", "*A&P Engagement Drop — breakdown:*",
+                  f"  🔔 Alert CTR:  {_pct(alert_ctr)}  ({alert_ctr - prev_alert_ctr:+.1f} pp)",
+                  f"  💊 Pill CTR:   {_pct(pill_ctr)}  ({pill_ctr - prev_pill_ctr:+.1f} pp)"]
 
     if reco_delta < -1:
         price_adp = round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0
@@ -502,11 +538,11 @@ def build_chat_text(m: dict) -> str:
         lines += ["", "*Reco Adoption — by Type:*"]
         for name, adp, prev_adp in all_recos:
             d = round(adp - prev_adp, 1)
-            lines.append(f"  {_si(d)} {name}: *{_pct(adp)}*  ({_dp(d)})")
+            lines.append(f"  {_si_pp(d)} {name}: *{_pct(adp)}*  ({_dp(d)})")
         biggest = max(all_recos, key=lambda x: abs(x[1] - x[2]))
         bname, badp, bprev = biggest
         bd = round(badp - bprev, 1)
-        lines.append(f"Biggest mover: {bname} ({bd:+.1f} pp WoW)")
+        lines.append(f"Biggest drop: {bname} ({bd:+.1f} pp WoW)")
 
     lines += ["", "_Full report sent via email._"]
     return "\n".join(lines)

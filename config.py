@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import date
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,6 +24,10 @@ if _missing:
         file=sys.stderr,
     )
     sys.exit(1)
+
+# ── Dates ─────────────────────────────────────────────────────────────────────
+LAUNCH_DATE   = date(2026, 4, 14)   # GC feature launch — used for MAU start
+BASELINE_DATE = date(2026, 6, 17)   # Z-score baseline start date
 
 # ── Mixpanel ──────────────────────────────────────────────────────────────────
 MX_PROJECT_ID  = int(os.getenv("MX_PROJECT_ID", "2823261"))
@@ -84,7 +89,10 @@ REST_RECOS_APPLIED = [
     "gc_nfbf_oos_recco_applied",
 ]
 
+TRAFFIC_EVENT = "Traffic_Report_Visit"
+
 ALL_EVENTS = list(dict.fromkeys(
+    [TRAFFIC_EVENT] +
     PILLS_SHOWN + PILLS_CLICKED +
     ALERTS_SHOWN + ALERTS_CLICKED +
     PRICE_RECOS_SHOWN + PRICE_RECOS_APPLIED +

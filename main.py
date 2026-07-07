@@ -16,7 +16,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from config import REPORT_TIMEZONE, SCHEDULE_HOUR, SCHEDULE_MINUTE
 from deliver import send_email, send_gchat
 from metrics import compute
-from mixpanel_client import fetch_all_windows, get_windows
+from mixpanel_client import fetch_all_windows, fetch_traffic_mau, get_windows
 from report import build
 
 logging.basicConfig(
@@ -30,12 +30,17 @@ log = logging.getLogger("gc_brief.main")
 def run_brief() -> None:
     log.info("=== GC Brief run started ===")
 
-    windows = get_windows(n_weeks=5)
+    # Baseline starts Jun 17, 2026 — keep n_weeks=2 (current + 1 prev for WoW).
+    # Increase to 6+ once ≥4 complete baseline weeks accumulate after Jul 15.
+    windows = get_windows(n_weeks=2)
     log.info("Report window: %s → %s", windows[0][0], windows[0][1])
 
     fetched = fetch_all_windows(windows)
 
-    m = compute(fetched)
+    log.info("Fetching monthly traffic MAU …")
+    monthly_traffic = fetch_traffic_mau()
+
+    m = compute(fetched, monthly_traffic)
     report = build(m)
 
     log.info("Sending Google Chat message …")

@@ -13,6 +13,7 @@ from config import (
     REST_RECOS_SHOWN, REST_RECOS_APPLIED,
     ALERT_PAIRS, PRICE_RECO_PAIRS, REST_RECO_PAIRS,
     PRICE_RECO_LABELS, REST_RECO_LABELS, PILL_LABELS,
+    TRAFFIC_EVENT, BASELINE_DATE,
 )
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -60,17 +61,29 @@ def _rate_baseline(baseline_windows: list[dict], num_keys, den_keys) -> list[flo
 
 # ── main computation ──────────────────────────────────────────────────────────
 
-def compute(fetched: list[dict]) -> dict:
+def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) -> dict:
     """
     fetched[0] = this week (W0), fetched[1] = prev week (W1),
-    fetched[2..4] = W2-W4 for Z-score baseline.
+    fetched[2+] = older weeks for Z-score baseline (if available).
+    monthly_traffic = {YYYY-MM: unique_sellers} from fetch_traffic_mau()
     """
     w0 = fetched[0]
     w1 = fetched[1]
-    baseline = fetched[1:]   # W1-W4 used as Z-score baseline
+    baseline = fetched[1:]   # W1+ used as Z-score baseline
 
     u0, t0 = w0["unique"], w0["total"]
     u1      = w1["unique"]
+
+    # ── Traffic Report Visits ─────────────────────────────────────────────────
+    traffic_u0 = _s(u0, TRAFFIC_EVENT)
+    traffic_e0 = _s(t0, TRAFFIC_EVENT)
+    traffic_u1 = _s(u1, TRAFFIC_EVENT)
+    traffic_wow_pct = round((traffic_u0 - traffic_u1) / traffic_u1 * 100, 1) if traffic_u1 else 0
+
+    # MAU: average monthly unique sellers across all complete months since launch
+    mau_values = list((monthly_traffic or {}).values())
+    traffic_mau = round(sum(mau_values) / len(mau_values)) if mau_values else 0
+    traffic_mau_months = list(monthly_traffic.keys()) if monthly_traffic else []
 
     # ── Pills ─────────────────────────────────────────────────────────────────
     PILL_CLICK_EVENTS = [
@@ -113,6 +126,16 @@ def compute(fetched: list[dict]) -> dict:
     prev_pills_clicked_u = _sum(u1, PILL_CLICK_EVENTS)
 
     pill_click_rate = _pct(tot_pills_clicked_u, tot_pills_shown_u)
+
+    # ── Alerts & Pills combined (L0 Engagement Rate) ───────────────────────────
+    ap_shown_u = tot_pills_shown_u + tot_alert_shown_u
+    ap_click_u = tot_pills_clicked_u + tot_alert_clicked_u
+    ap_eng_rate = _pct(ap_click_u, ap_shown_u)
+
+    prev_ap_shown_u = prev_pills_shown_u + _sum(u1, ALERTS_SHOWN)
+    prev_ap_click_u = prev_pills_clicked_u + _sum(u1, ALERTS_CLICKED)
+    prev_ap_eng_rate = _pct(prev_ap_click_u, prev_ap_shown_u)
+    ap_eng_delta = round(ap_eng_rate - prev_ap_eng_rate, 1)
 
     # ── Alerts ────────────────────────────────────────────────────────────────
     alert_rows = []
@@ -189,30 +212,34 @@ def compute(fetched: list[dict]) -> dict:
     prev_reco_applied_u = _sum(u1, PRICE_RECOS_APPLIED) + _sum(u1, REST_RECOS_APPLIED)
 
     # ── Z-scores ──────────────────────────────────────────────────────────────
-    imp_alert_ctr  = _pct(_s(u0, "gc_impressions_alert_cta_click"),
-                           _s(u0, "gc_impressions_alert_shown"))
-    conv_alert_ctr = _pct(_s(u0, "gc_conversion_alert_cta_click"),
-                           _s(u0, "gc_conversion_alert_shown"))
+    fa_ctr         = _pct(_s(u0, "gc_fa_recco_applied"), _s(u0, "gc_fa_recco_shown"))
+    supp_ctr       = _pct(_s(u0, "gc_suppression_recco_clicked"), _s(u0, "gc_suppression_recco_shown"))
     overall_reco_ctr = _pct(tot_reco_applied_u, tot_reco_shown_u)
-    price_reco_ctr   = _pct(price_applied_u, price_shown_u)
-    fa_ctr = _pct(_s(u0, "gc_fa_recco_applied"), _s(u0, "gc_fa_recco_shown"))
+
+    def _ap_baseline(bws):
+        """A&P Engagement Rate across baseline windows (unique basis)."""
+        rates = []
+        for bw in bws:
+            bu = bw["unique"]
+            num = _sum(bu, PILL_CLICK_EVENTS) + _sum(bu, ALERTS_CLICKED)
+            den = _sum(bu, PILLS_SHOWN) + _sum(bu, ALERTS_SHOWN)
+            rates.append(_pct(num, den))
+        return rates
 
     zscore_specs = [
-        ("Pill Click Rate", pill_click_rate,
+        ("A&P Engagement Rate", ap_eng_rate, _ap_baseline(baseline)),
+        ("Pill Engagement Rate", pill_click_rate,
          _rate_baseline(baseline, PILL_CLICK_EVENTS, PILLS_SHOWN)),
-        ("Impressions Alert CTR", imp_alert_ctr,
-         _rate_baseline(baseline, "gc_impressions_alert_cta_click",
-                        "gc_impressions_alert_shown")),
-        ("Conversion Alert CTR", conv_alert_ctr,
-         _rate_baseline(baseline, "gc_conversion_alert_cta_click",
-                        "gc_conversion_alert_shown")),
-        ("Overall Reco CTR", overall_reco_ctr,
+        ("Alert Engagement Rate",
+         _pct(tot_alert_clicked_u, tot_alert_shown_u),
+         _rate_baseline(baseline, ALERTS_CLICKED, ALERTS_SHOWN)),
+        ("Overall Reco Adoption", overall_reco_ctr,
          _rate_baseline(baseline, PRICE_RECOS_APPLIED + REST_RECOS_APPLIED,
                         PRICE_RECOS_SHOWN + REST_RECOS_SHOWN)),
-        ("Price Reco CTR", price_reco_ctr,
-         _rate_baseline(baseline, PRICE_RECOS_APPLIED, PRICE_RECOS_SHOWN)),
         ("F-Assured CTR", fa_ctr,
          _rate_baseline(baseline, "gc_fa_recco_applied", "gc_fa_recco_shown")),
+        ("Suppression CTR", supp_ctr,
+         _rate_baseline(baseline, "gc_suppression_recco_clicked", "gc_suppression_recco_shown")),
     ]
 
     zscore_rows = []
@@ -237,11 +264,10 @@ def compute(fetched: list[dict]) -> dict:
         if _s(u0, applied_ev) > _s(u0, shown_ev) > 0:
             anomalies.append({"type": "funnel_inversion", "event": shown_ev})
 
-    from datetime import date as _date
-    LAUNCH = _date(2026, 4, 14)
     try:
+        from datetime import date as _date
         week_start = _date.fromisoformat(w0["from"])
-        n_baseline = (week_start - LAUNCH).days // 7
+        n_baseline = (week_start - BASELINE_DATE).days // 7
     except Exception:
         n_baseline = None
 
@@ -249,6 +275,19 @@ def compute(fetched: list[dict]) -> dict:
         "period_from": w0["from"],
         "period_to":   w0["to"],
         "n_baseline":  n_baseline,
+        # traffic
+        "traffic_u0":         traffic_u0,
+        "traffic_e0":         traffic_e0,
+        "traffic_u1":         traffic_u1,
+        "traffic_wow_pct":    traffic_wow_pct,
+        "traffic_mau":        traffic_mau,
+        "traffic_mau_months": traffic_mau_months,
+        # A&P combined engagement
+        "ap_shown_u":       ap_shown_u,
+        "ap_click_u":       ap_click_u,
+        "ap_eng_rate":      ap_eng_rate,
+        "prev_ap_eng_rate": prev_ap_eng_rate,
+        "ap_eng_delta":     ap_eng_delta,
         # pills
         "pill_shown_rows":       pill_shown_rows,
         "pill_click_rows":       pill_click_rows,
