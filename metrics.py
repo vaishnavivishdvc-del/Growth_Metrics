@@ -127,16 +127,6 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
 
     pill_click_rate = _pct(tot_pills_clicked_u, tot_pills_shown_u)
 
-    # ── Alerts & Pills combined (L0 Engagement Rate) ───────────────────────────
-    ap_shown_u = tot_pills_shown_u + tot_alert_shown_u
-    ap_click_u = tot_pills_clicked_u + tot_alert_clicked_u
-    ap_eng_rate = _pct(ap_click_u, ap_shown_u)
-
-    prev_ap_shown_u = prev_pills_shown_u + _sum(u1, ALERTS_SHOWN)
-    prev_ap_click_u = prev_pills_clicked_u + _sum(u1, ALERTS_CLICKED)
-    prev_ap_eng_rate = _pct(prev_ap_click_u, prev_ap_shown_u)
-    ap_eng_delta = round(ap_eng_rate - prev_ap_eng_rate, 1)
-
     # ── Alerts ────────────────────────────────────────────────────────────────
     alert_rows = []
     for shown_ev, clicked_ev in ALERT_PAIRS:
@@ -160,6 +150,16 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
     tot_alert_clicked_t = _sum(t0, ALERTS_CLICKED)
     tot_prev_shown_u    = _sum(u1, ALERTS_SHOWN)
     tot_prev_clicked_u  = _sum(u1, ALERTS_CLICKED)
+
+    # ── Alerts & Pills combined (L0 Engagement Rate) ──────────────────────────
+    ap_shown_u = tot_pills_shown_u + tot_alert_shown_u
+    ap_click_u = tot_pills_clicked_u + tot_alert_clicked_u
+    ap_eng_rate = _pct(ap_click_u, ap_shown_u)
+
+    prev_ap_shown_u = prev_pills_shown_u + _sum(u1, ALERTS_SHOWN)
+    prev_ap_click_u = prev_pills_clicked_u + _sum(u1, ALERTS_CLICKED)
+    prev_ap_eng_rate = _pct(prev_ap_click_u, prev_ap_shown_u)
+    ap_eng_delta = round(ap_eng_rate - prev_ap_eng_rate, 1)
 
     # ── Price recos ───────────────────────────────────────────────────────────
     price_sub = []
