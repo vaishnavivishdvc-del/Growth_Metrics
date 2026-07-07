@@ -8,11 +8,12 @@ import numpy as np
 
 from config import (
     PILLS_SHOWN, PILLS_CLICKED,
+    OTHER_PILLS_SHOWN, OTHER_PILLS_VIEWED,
     ALERTS_SHOWN, ALERTS_CLICKED,
     PRICE_RECOS_SHOWN, PRICE_RECOS_APPLIED,
     REST_RECOS_SHOWN, REST_RECOS_APPLIED,
     ALERT_PAIRS, PRICE_RECO_PAIRS, REST_RECO_PAIRS,
-    PRICE_RECO_LABELS, REST_RECO_LABELS, PILL_LABELS,
+    PRICE_RECO_LABELS, REST_RECO_LABELS, PILL_LABELS, OTHER_PILL_LABELS,
     TRAFFIC_EVENT, BASELINE_DATE,
 )
 
@@ -117,10 +118,33 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
         for i, e in enumerate(PILLS_CLICKED)
     ]
 
+    # "Other listings" reach rows (shown after filter-pill; not in engagement rate)
+    other_pill_rows = [
+        {
+            "name":      OTHER_PILL_LABELS.get(e, e),
+            "shown_u":   _s(u0, e),
+            "shown_t":   _s(t0, e),
+            "prev_shown_u": _s(u1, e),
+        }
+        for e in OTHER_PILLS_SHOWN
+    ] + [
+        {
+            "name":       OTHER_PILL_LABELS.get(e, e),
+            "viewed_u":   _s(u0, e),
+            "viewed_t":   _s(t0, e),
+            "prev_viewed_u": _s(u1, e),
+        }
+        for e in OTHER_PILLS_VIEWED
+    ]
+
     tot_pills_shown_u  = _sum(u0, PILLS_SHOWN)
     tot_pills_shown_t  = _sum(t0, PILLS_SHOWN)
     tot_pills_clicked_u = _sum(u0, PILL_CLICK_EVENTS)
     tot_pills_clicked_t = _sum(t0, PILL_CLICK_EVENTS)
+
+    # supplementary reach totals (for report tables only — not part of engagement rate)
+    tot_other_pills_shown_u  = _sum(u0, OTHER_PILLS_SHOWN)
+    tot_other_pills_viewed_u = _sum(u0, OTHER_PILLS_VIEWED)
 
     prev_pills_shown_u   = _sum(u1, PILLS_SHOWN)
     prev_pills_clicked_u = _sum(u1, PILL_CLICK_EVENTS)
@@ -289,8 +313,11 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
         "prev_ap_eng_rate": prev_ap_eng_rate,
         "ap_eng_delta":     ap_eng_delta,
         # pills
-        "pill_shown_rows":       pill_shown_rows,
-        "pill_click_rows":       pill_click_rows,
+        "pill_shown_rows":         pill_shown_rows,
+        "pill_click_rows":         pill_click_rows,
+        "other_pill_rows":         other_pill_rows,
+        "tot_other_pills_shown_u": tot_other_pills_shown_u,
+        "tot_other_pills_viewed_u":tot_other_pills_viewed_u,
         "tot_pills_shown_u":     tot_pills_shown_u,
         "tot_pills_shown_t":     tot_pills_shown_t,
         "tot_pills_clicked_u":   tot_pills_clicked_u,

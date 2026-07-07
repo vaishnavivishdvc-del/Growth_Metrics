@@ -54,9 +54,17 @@ PILLS_SHOWN = [
     "gc_losing_imp_listings_filter_shown",
     "gc_losing_conv_listings_filter_shown",
 ]
+OTHER_PILLS_SHOWN = [
+    "gc_losing_imp_other_listings_shown",
+    "gc_losing_conv_other_listings_shown",
+]
 PILLS_CLICKED = [
     "gc_losing_imp_listings_filter_click",
     "gc_losing_conv_listings_filter_click",
+]
+OTHER_PILLS_VIEWED = [
+    "gc_losing_imp_other_listings_viewed",
+    "gc_losing_conv_other_listings_viewed",
 ]
 ALERTS_SHOWN = [
     "gc_impressions_alert_shown",
@@ -93,7 +101,8 @@ TRAFFIC_EVENT = "Traffic_Report_Visit"
 
 ALL_EVENTS = list(dict.fromkeys(
     [TRAFFIC_EVENT] +
-    PILLS_SHOWN + PILLS_CLICKED +
+    PILLS_SHOWN + OTHER_PILLS_SHOWN +
+    PILLS_CLICKED + OTHER_PILLS_VIEWED +
     ALERTS_SHOWN + ALERTS_CLICKED +
     PRICE_RECOS_SHOWN + PRICE_RECOS_APPLIED +
     REST_RECOS_SHOWN + REST_RECOS_APPLIED
@@ -117,4 +126,10 @@ REST_RECO_LABELS = {
 PILL_LABELS = {
     "gc_losing_imp_listings_filter_click":  "Losing Imp",
     "gc_losing_conv_listings_filter_click": "Losing Conv",
+}
+OTHER_PILL_LABELS = {
+    "gc_losing_imp_other_listings_shown":   "Other Imp Shown",
+    "gc_losing_conv_other_listings_shown":  "Other Conv Shown",
+    "gc_losing_imp_other_listings_viewed":  "Other Imp Viewed",
+    "gc_losing_conv_other_listings_viewed": "Other Conv Viewed",
 }
