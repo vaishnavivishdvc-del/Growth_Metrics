@@ -203,15 +203,22 @@ def _kpi_cards(m: dict) -> str:
         f'<td style="{c}text-align:center;">{traffic_wow:+.1f}%</td>'
         f'<td style="{c}text-align:center;">{_dp(ap_delta)}</td>'
         f'<td style="{c}text-align:center;">{_dp(reco_delta)}</td></tr>'
-        f'<tr><td style="{c}font-weight:bold;">{mau_label}</td>'
-        f'<td style="{c}text-align:center;">{_fmt(traffic_mau) if traffic_mau else "—"}</td>'
-        f'<td style="{c}text-align:center;">—</td>'
-        f'<td style="{c}text-align:center;">—</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">Status</td>'
         f'<td style="{c}text-align:center;"><span class="{t_cls}">{t_icon}</span></td>'
         f'<td style="{c}text-align:center;"><span class="{a_cls}">{a_icon}</span></td>'
         f'<td style="{c}text-align:center;"><span class="{r_cls}">{r_icon}</span></td></tr>'
         '</tbody></table>'
+    )
+
+    mau_months_list  = m.get("traffic_mau_months", [])
+    mau_values_list  = m.get("traffic_mau_values", [])
+    mau_months_str   = " | ".join(
+        f"{mo}: {_fmt(val)}"
+        for mo, val in zip(mau_months_list, mau_values_list)
+    ) if mau_values_list else "—"
+    card += (
+        f'<p style="font-size:13px;margin:4px 0 12px;">📊 Traffic MAU ({mau_label}): '
+        f'<b>{_fmt(traffic_mau)} sellers/month</b> — {mau_months_str}</p>'
         '<p style="font-size:11px;color:#888;">Definitions: A&amp;P Engagement = (unique alert clickers + unique pill clickers) ÷ (unique alert viewers + unique pill viewers). '
         'Reco Adoption = unique sellers applied any reco ÷ unique sellers shown any reco. All rates: unique sellers basis.</p>'
     )

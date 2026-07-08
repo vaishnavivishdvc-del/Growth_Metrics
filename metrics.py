@@ -82,9 +82,11 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
     traffic_wow_pct = round((traffic_u0 - traffic_u1) / traffic_u1 * 100, 1) if traffic_u1 else 0
 
     # MAU: average monthly unique sellers across all complete months since launch
-    mau_values = list((monthly_traffic or {}).values())
+    mau_values  = list((monthly_traffic or {}).values())
+    mau_months  = list((monthly_traffic or {}).keys())
     traffic_mau = round(sum(mau_values) / len(mau_values)) if mau_values else 0
-    traffic_mau_months = list(monthly_traffic.keys()) if monthly_traffic else []
+    traffic_mau_months  = mau_months
+    traffic_mau_values  = mau_values   # per-month counts for the MAU detail line
 
     # ── Pills ─────────────────────────────────────────────────────────────────
     PILL_CLICK_EVENTS = [
@@ -306,6 +308,7 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
         "traffic_wow_pct":    traffic_wow_pct,
         "traffic_mau":        traffic_mau,
         "traffic_mau_months": traffic_mau_months,
+        "traffic_mau_values": traffic_mau_values,
         # A&P combined engagement
         "ap_shown_u":       ap_shown_u,
         "ap_click_u":       ap_click_u,

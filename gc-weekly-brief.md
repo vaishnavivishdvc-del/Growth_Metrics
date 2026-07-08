@@ -187,8 +187,9 @@ zscore_specs = [
 | **This week** | X sellers | X% | X% |
 | **Last week** | X sellers | X% | X% |
 | **WoW Δ** | +/− X% | +/− X pp | +/− X pp |
-| **MAU (Apr–Jun avg)** | X sellers | — | — |
 | **Status** | 🟢/🟡/🔴 | 🟢/🟡/🔴 | 🟢/🟡/🔴 |
+
+📊 Traffic MAU (Apr–Jun avg): **X sellers/month** — Apr: X | May: X | Jun: X
 
 **Status thresholds:**
 - Traffic Visits: 🟢 WoW > −5% | 🟡 −15% ≤ WoW ≤ −5% | 🔴 WoW < −15%
