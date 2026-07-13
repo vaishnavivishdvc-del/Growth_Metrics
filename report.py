@@ -289,24 +289,46 @@ def _kpi_cards(m: dict) -> str:
         else:
             driver = f"Combined: reach {shown_wow:+.1f}% WoW, clicks {click_wow:+.1f}% WoW."
 
-        # Stacked cells: current / prev in grey below — no extra columns
-        rca_tbl = [
+        # Which dropped more — alerts or pills?
+        if abs(alert_ctr - prev_alert_ctr) >= abs(pill_ctr - prev_pill_ctr):
+            leader = f"Alerts drove the drop (Alert CTR {_pct(alert_ctr)}, {alert_ctr - prev_alert_ctr:+.1f} pp); Pill CTR {_pct(pill_ctr)} ({pill_ctr - prev_pill_ctr:+.1f} pp)."
+        else:
+            leader = f"Pills drove the drop (Pill CTR {_pct(pill_ctr)}, {pill_ctr - prev_pill_ctr:+.1f} pp); Alert CTR {_pct(alert_ctr)} ({alert_ctr - prev_alert_ctr:+.1f} pp)."
+
+        # Alert rows (Impressions + Conversion)
+        alert_rows_rca = [
             [
                 r["name"],
-                _stacked(_fmt(r["shown_u"]),   _fmt(r["prev_shown_u"])),
-                _stacked(_fmt(r["clicked_u"]),  _fmt(r["prev_clicked_u"])),
-                _stacked(_pct(r["ctr"]),        _pct(r["prev_ctr"]), is_pct=True),
+                _stacked(_fmt(r["shown_u"]),  _fmt(r["prev_shown_u"])),
+                _stacked(_fmt(r["clicked_u"]), _fmt(r["prev_clicked_u"])),
+                _stacked(_pct(r["ctr"]),       _pct(r["prev_ctr"]), is_pct=True),
                 f"{r['delta_pp']:+.1f} pp",
             ]
             for r in m["alert_rows"]
         ]
+        # Pill rows (Losing Imp + Losing Conv)
+        pill_rows_rca = [
+            [
+                r["name"],
+                _stacked(_fmt(r["shown_u"]),   _fmt(r["prev_shown_u"])),
+                _stacked(_fmt(r["clicked_u"]),  _fmt(r["prev_u"])),
+                _stacked(
+                    _pct(round(r["clicked_u"] / r["shown_u"] * 100, 1) if r["shown_u"] else 0),
+                    _pct(round(r["prev_u"] / r["prev_shown_u"] * 100, 1) if r["prev_shown_u"] else 0),
+                    is_pct=True,
+                ),
+                f"{round((r['clicked_u']/r['shown_u']*100 if r['shown_u'] else 0) - (r['prev_u']/r['prev_shown_u']*100 if r['prev_shown_u'] else 0), 1):+.1f} pp",
+            ]
+            for r in m["pill_click_rows"]
+        ]
+
         rca_parts.append(
             f'<h3>A&amp;P Engagement Drop — RCA</h3>'
-            f'<p style="font-size:11px;color:#888;">This week: {pf}–{pt} &nbsp;|&nbsp; Prev week: {prev_period} (grey)</p>'
+            f'<p style="font-size:11px;color:#888;">This week: {pf}–{pt} &nbsp;|&nbsp; Prev week: {prev_period} <em>(prev numbers in grey)</em></p>'
+            f'<p>{leader}</p>'
             f'<p><b>Driver:</b> {driver}</p>'
-            f'<p>Alert CTR: {_pct(alert_ctr)} ({alert_ctr - prev_alert_ctr:+.1f} pp)&nbsp;&nbsp;|&nbsp;&nbsp;'
-            f'Pill CTR: {_pct(pill_ctr)} ({pill_ctr - prev_pill_ctr:+.1f} pp)</p>'
-            + _tbl(["Alert Type", "Sellers Shown", "Sellers Clicked", "CTR", "Δ pp"], rca_tbl)
+            + _tbl(["Alert / Pill", "Sellers Shown", "Sellers Clicked", "CTR", "Δ pp"],
+                   alert_rows_rca + pill_rows_rca)
         )
 
     if reco_delta < -1:
@@ -317,27 +339,40 @@ def _kpi_cards(m: dict) -> str:
         rca_tbl = [
             [
                 "Price Recos (All)",
-                _stacked(_fmt(m["price_shown_u"]),   _fmt(m.get("prev_price_shown_u", 0))),
-                _stacked(_fmt(m["price_applied_u"]),  _fmt(m.get("prev_price_applied_u", 0))),
+                _stacked(_fmt(m["price_shown_u"]),  _fmt(m.get("prev_price_shown_u", 0))),
+                _stacked(_fmt(m["price_applied_u"]), _fmt(m.get("prev_price_applied_u", 0))),
                 _stacked(_pct(price_adp), _pct(prev_price_adp), is_pct=True),
                 f"{round(price_adp - prev_price_adp, 1):+.1f} pp",
-                price_driver,
             ]
         ] + [
             [
                 r["name"],
-                _stacked(_fmt(r["shown_u"]),   _fmt(r["prev_shown_u"])),
-                _stacked(_fmt(r["applied_u"]),  _fmt(r["prev_applied_u"])),
-                _stacked(_pct(r["adoption"]),   _pct(r["prev_adoption"]), is_pct=True),
+                _stacked(_fmt(r["shown_u"]),  _fmt(r["prev_shown_u"])),
+                _stacked(_fmt(r["applied_u"]), _fmt(r["prev_applied_u"])),
+                _stacked(_pct(r["adoption"]),  _pct(r["prev_adoption"]), is_pct=True),
                 f"{round(r['adoption'] - r['prev_adoption'], 1):+.1f} pp",
-                "Den ↓" if r["shown_u"] < r["prev_shown_u"] * 0.8 else "Num/Rate ↓",
             ]
             for r in m["rest_reco_rows"]
         ]
+
+        # Price Reco sub-breakdown (expanded below the main RCA table)
+        price_sub_rca = [
+            [
+                p["name"],
+                _stacked(_fmt(p["shown_u"]),  _fmt(p["prev_shown_u"])),
+                _stacked(_fmt(p["applied_u"]), _fmt(p["prev_applied_u"])),
+                _stacked(_pct(p["adoption"]),  _pct(p["prev_adoption"]), is_pct=True),
+                f"{round(p['adoption'] - p['prev_adoption'], 1):+.1f} pp",
+            ]
+            for p in m["price_sub"]
+        ]
+
         rca_parts.append(
             '<h3>Reco Adoption Drop — RCA by Reco Type</h3>'
-            f'<p style="font-size:11px;color:#888;">This week: {pf}–{pt} &nbsp;|&nbsp; Prev week: {prev_period} (grey)</p>'
-            + _tbl(["Reco Type", "Sellers Shown", "Sellers Applied", "Adoption %", "Δ pp", "Driver"], rca_tbl)
+            f'<p style="font-size:11px;color:#888;">This week: {pf}–{pt} &nbsp;|&nbsp; Prev week: {prev_period} <em>(prev numbers in grey)</em></p>'
+            + _tbl(["Reco Type", "Sellers Shown", "Sellers Applied", "Adoption %", "Δ pp"], rca_tbl)
+            + '<h3 style="font-size:13px;color:#555;margin:8px 0 4px;">↳ Price Recos Sub-breakdown</h3>'
+            + _tbl(["Sub-type", "Sellers Shown", "Sellers Applied", "Adoption %", "Δ pp"], price_sub_rca)
         )
 
     return card + "\n".join(rca_parts)
@@ -506,6 +541,9 @@ def build_html(m: dict) -> str:
 
 <h2>KPI Summary</h2>
 {_kpi_cards(m)}
+
+<hr style="border:none;border-top:1px solid #e8e8e8;margin:28px 0 20px;">
+<h2 style="color:#444;font-size:15px;letter-spacing:0.03em;">🔍 Deep Dive Metrics</h2>
 
 <h2>Alert Metrics — {pf} to {pt}</h2>
 {_tbl(
