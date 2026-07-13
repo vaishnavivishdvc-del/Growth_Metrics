@@ -86,6 +86,44 @@ function main() {{
     return {r["key"][0]: r["value"] for r in rows}
 
 
+def fetch_traffic_30d() -> dict:
+    """
+    Fetch unique sellers for Traffic_Report_Visit for:
+      - current 30-day window  (yesterday − 29 days → yesterday)
+      - prior   30-day window  (yesterday − 59 days → yesterday − 30 days)
+    Returns {"from0", "to0", "u0", "from1", "to1", "u1"}.
+    """
+    yesterday = date.today() - timedelta(days=1)
+    to0 = yesterday
+    fr0 = to0 - timedelta(days=29)
+    to1 = fr0 - timedelta(days=1)
+    fr1 = to1 - timedelta(days=29)
+
+    selector = json.dumps([{"event": TRAFFIC_EVENT}])
+    script_tpl = """
+function main() {{
+  return Events({{
+    from_date: '{from_date}',
+    to_date:   '{to_date}',
+    event_selectors: {sel}
+  }}).groupByUser(['name'], mixpanel.reducer.any())
+  .groupBy(['key.1'], mixpanel.reducer.count());
+}}"""
+
+    def _uniq(fr, to):
+        rows = _jql(script_tpl.format(from_date=fr, to_date=to, sel=selector))
+        return next((r["value"] for r in rows if r["key"][0] == TRAFFIC_EVENT), 0)
+
+    u0 = _uniq(fr0, to0)
+    u1 = _uniq(fr1, to1)
+    log.info("Traffic 30d: %d sellers (%s–%s) vs %d sellers (%s–%s)",
+             u0, fr0, to0, u1, fr1, to1)
+    return {
+        "from0": str(fr0), "to0": str(to0), "u0": u0,
+        "from1": str(fr1), "to1": str(to1), "u1": u1,
+    }
+
+
 def fetch_traffic_mau() -> dict[str, int]:
     """
     Unique sellers for Traffic_Report_Visit per complete calendar month since
@@ -118,6 +156,16 @@ function main() {{
         mo += 1
         if mo > 12:
             yr, mo = yr + 1, 1
+
+    # Current partial month — from 1st of this month to yesterday
+    yesterday = today - timedelta(days=1)
+    partial_start = date(today.year, today.month, 1)
+    if partial_start <= yesterday:
+        rows = _jql(script_tpl.format(from_date=partial_start, to_date=yesterday, sel=selector))
+        partial_count = next((r["value"] for r in rows if r["key"][0] == TRAFFIC_EVENT), 0)
+        partial_key = f"{today.year}-{today.month:02d} (so far, {yesterday.strftime('%b %-d')})"
+        monthly[partial_key] = partial_count
+        log.info("Traffic partial month so far (%s): %d unique sellers", partial_key, partial_count)
 
     return monthly
 

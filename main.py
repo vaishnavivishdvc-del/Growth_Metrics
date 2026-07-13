@@ -16,7 +16,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from config import REPORT_TIMEZONE, SCHEDULE_HOUR, SCHEDULE_MINUTE
 from deliver import send_email, send_gchat
 from metrics import compute
-from mixpanel_client import fetch_all_windows, fetch_traffic_mau, get_windows
+from mixpanel_client import fetch_all_windows, fetch_traffic_mau, fetch_traffic_30d, get_windows
 from report import build
 
 logging.basicConfig(
@@ -37,10 +37,13 @@ def run_brief() -> None:
 
     fetched = fetch_all_windows(windows)
 
+    log.info("Fetching 30-day traffic window …")
+    traffic_30d = fetch_traffic_30d()
+
     log.info("Fetching monthly traffic MAU …")
     monthly_traffic = fetch_traffic_mau()
 
-    m = compute(fetched, monthly_traffic)
+    m = compute(fetched, monthly_traffic, traffic_30d)
     report = build(m)
 
     log.info("Sending Google Chat message …")

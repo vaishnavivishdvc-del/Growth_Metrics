@@ -159,6 +159,7 @@ def _status_icon(d: float, is_pct_change: bool = False) -> tuple[str, str]:
 
 
 def _kpi_cards(m: dict) -> str:
+    # ── Rate metrics (7-day) ──────────────────────────────────────────────────
     ap_eng        = m["ap_eng_rate"]
     prev_ap_eng   = m["prev_ap_eng_rate"]
     ap_delta      = m["ap_eng_delta"]
@@ -167,60 +168,88 @@ def _kpi_cards(m: dict) -> str:
     prev_reco_adoption = round(m["prev_reco_applied_u"] / m["prev_reco_shown_u"] * 100, 1) if m.get("prev_reco_shown_u") else 0
     reco_delta         = round(reco_adoption - prev_reco_adoption, 1)
 
-    traffic_u0  = m["traffic_u0"]
-    traffic_u1  = m["traffic_u1"]
-    traffic_wow = m["traffic_wow_pct"]
-    traffic_mau = m["traffic_mau"]
-    mau_label   = f"MAU ({', '.join(m['traffic_mau_months'])})" if m.get("traffic_mau_months") else "MAU"
+    # ── Traffic (30-day) ──────────────────────────────────────────────────────
+    t30_u0    = m.get("traffic_30d_u0", 0)
+    t30_u1    = m.get("traffic_30d_u1", 0)
+    t30_wow   = m.get("traffic_30d_wow_pct", 0)
+    t30_from0 = m.get("traffic_30d_from0", "")
+    t30_to0   = m.get("traffic_30d_to0", "")
+    t30_from1 = m.get("traffic_30d_from1", "")
+    t30_to1   = m.get("traffic_30d_to1", "")
+
+    # ── MAU detail line ───────────────────────────────────────────────────────
+    traffic_mau      = m.get("traffic_mau", 0)
+    mau_months_list  = m.get("traffic_mau_months", [])
+    mau_values_list  = m.get("traffic_mau_values", [])
+    mau_detail       = " | ".join(
+        f"{mo}: {_fmt(val)}"
+        for mo, val in zip(mau_months_list, mau_values_list)
+    ) if mau_values_list else "—"
 
     def _dp(d: float) -> str:
         return f"{'+' if d >= 0 else ''}{d} pp"
 
-    t_icon, t_cls = _status_icon(traffic_wow, is_pct_change=True)
     a_icon, a_cls = _status_icon(ap_delta)
     r_icon, r_cls = _status_icon(reco_delta)
+    t_icon, t_cls = _status_icon(t30_wow, is_pct_change=True)
 
     c  = "border:1px solid #e0e0e0;padding:8px 12px;font-size:13px;"
     ch = "background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;text-align:center;"
+    cl = "background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;width:22%;"
 
+    # ── Table 1: Rate Metrics (7-day) ─────────────────────────────────────────
+    rate_period = f"{m['period_from']} – {m['period_to']} (7-day)"
     card = (
-        '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">'
+        f'<p style="font-size:12px;color:#555;margin:0 0 4px;"><b>📊 Rate Metrics</b> — {rate_period}</p>'
+        '<table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:13px;">'
         '<thead><tr>'
-        f'<th style="background:#f0f4ff;padding:8px 12px;border:1px solid #d0d7e8;width:18%;"></th>'
-        f'<th style="{ch}">Traffic Report Visits</th>'
-        f'<th style="{ch}">A&amp;P Engagement Rate</th>'
-        f'<th style="{ch}">Reco Adoption Rate</th>'
+        f'<th style="{cl}"></th>'
+        f'<th style="{ch}">✅ Reco Adoption Rate</th>'
+        f'<th style="{ch}">💡 A&amp;P Engagement Rate</th>'
         '</tr></thead><tbody>'
         f'<tr><td style="{c}font-weight:bold;">This week</td>'
-        f'<td style="{c}text-align:center;font-weight:bold;">{_fmt(traffic_u0)} sellers</td>'
-        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(ap_eng)}</td>'
-        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(reco_adoption)}</td></tr>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(reco_adoption)}</td>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_pct(ap_eng)}</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">Last week</td>'
-        f'<td style="{c}text-align:center;">{_fmt(traffic_u1)} sellers</td>'
-        f'<td style="{c}text-align:center;">{_pct(prev_ap_eng)}</td>'
-        f'<td style="{c}text-align:center;">{_pct(prev_reco_adoption)}</td></tr>'
-        f'<tr><td style="{c}font-weight:bold;">WoW change</td>'
-        f'<td style="{c}text-align:center;">{traffic_wow:+.1f}%</td>'
-        f'<td style="{c}text-align:center;">{_dp(ap_delta)}</td>'
-        f'<td style="{c}text-align:center;">{_dp(reco_delta)}</td></tr>'
+        f'<td style="{c}text-align:center;">{_pct(prev_reco_adoption)}</td>'
+        f'<td style="{c}text-align:center;">{_pct(prev_ap_eng)}</td></tr>'
+        f'<tr><td style="{c}font-weight:bold;">WoW Δ</td>'
+        f'<td style="{c}text-align:center;">{_dp(reco_delta)}</td>'
+        f'<td style="{c}text-align:center;">{_dp(ap_delta)}</td></tr>'
         f'<tr><td style="{c}font-weight:bold;">Status</td>'
-        f'<td style="{c}text-align:center;"><span class="{t_cls}">{t_icon}</span></td>'
-        f'<td style="{c}text-align:center;"><span class="{a_cls}">{a_icon}</span></td>'
-        f'<td style="{c}text-align:center;"><span class="{r_cls}">{r_icon}</span></td></tr>'
+        f'<td style="{c}text-align:center;"><span class="{r_cls}">{r_icon}</span></td>'
+        f'<td style="{c}text-align:center;"><span class="{a_cls}">{a_icon}</span></td></tr>'
         '</tbody></table>'
     )
 
-    mau_months_list  = m.get("traffic_mau_months", [])
-    mau_values_list  = m.get("traffic_mau_values", [])
-    mau_months_str   = " | ".join(
-        f"{mo}: {_fmt(val)}"
-        for mo, val in zip(mau_months_list, mau_values_list)
-    ) if mau_values_list else "—"
+    # ── Table 2: Traffic Visits (30-day) ──────────────────────────────────────
+    traffic_period = f"{t30_from0} – {t30_to0} (30-day)"
     card += (
-        f'<p style="font-size:13px;margin:4px 0 12px;">📊 Traffic MAU ({mau_label}): '
-        f'<b>{_fmt(traffic_mau)} sellers/month</b> — {mau_months_str}</p>'
-        '<p style="font-size:11px;color:#888;">Definitions: A&amp;P Engagement = (unique alert clickers + unique pill clickers) ÷ (unique alert viewers + unique pill viewers). '
-        'Reco Adoption = unique sellers applied any reco ÷ unique sellers shown any reco. All rates: unique sellers basis.</p>'
+        f'<p style="font-size:12px;color:#555;margin:0 0 4px;"><b>📈 Traffic Report Visits</b> — {traffic_period}</p>'
+        '<table style="width:100%;border-collapse:collapse;margin-bottom:6px;font-size:13px;">'
+        '<thead><tr>'
+        f'<th style="{cl}"></th>'
+        f'<th style="{ch}">📈 Traffic Report Visits</th>'
+        '</tr></thead><tbody>'
+        f'<tr><td style="{c}font-weight:bold;">This 30 days</td>'
+        f'<td style="{c}text-align:center;font-weight:bold;">{_fmt(t30_u0)} sellers</td></tr>'
+        f'<tr><td style="{c}font-weight:bold;">Prev 30 days <span style="font-weight:normal;color:#888;">({t30_from1}–{t30_to1})</span></td>'
+        f'<td style="{c}text-align:center;">{_fmt(t30_u1)} sellers</td></tr>'
+        f'<tr><td style="{c}font-weight:bold;">MoM Δ</td>'
+        f'<td style="{c}text-align:center;">{t30_wow:+.1f}%</td></tr>'
+        f'<tr><td style="{c}font-weight:bold;">Status</td>'
+        f'<td style="{c}text-align:center;"><span class="{t_cls}">{t_icon}</span></td></tr>'
+        '</tbody></table>'
+    )
+
+    # ── Grey MAU line ─────────────────────────────────────────────────────────
+    card += (
+        f'<p style="font-size:11px;color:#888;margin:2px 0 16px;">'
+        f'Traffic MAU (complete months avg): <b>{_fmt(traffic_mau)} sellers/month</b>'
+        f' — {mau_detail}</p>'
+        '<p style="font-size:11px;color:#888;margin:0 0 16px;">'
+        'Rates: unique sellers basis. A&amp;P Engagement = (alert clicks + pill clicks) ÷ (alerts shown + pills shown). '
+        'Reco Adoption = applied unique ÷ shown unique.</p>'
     )
 
     rca_parts = []
@@ -500,8 +529,8 @@ def build_html(m: dict) -> str:
 def build_chat_text(m: dict) -> str:
     period = f"{m['period_from']} – {m['period_to']}"
 
-    traffic_u0  = m["traffic_u0"]
-    traffic_wow = m["traffic_wow_pct"]
+    traffic_u0  = m.get("traffic_30d_u0", m["traffic_u0"])
+    traffic_wow = m.get("traffic_30d_wow_pct", 0)
 
     ap_eng    = m["ap_eng_rate"]
     ap_delta  = m["ap_eng_delta"]
@@ -522,7 +551,7 @@ def build_chat_text(m: dict) -> str:
     lines = [
         f"*📊 GC Brief — {period}*",
         "",
-        f"📈 Traffic Visits:    *{_fmt(traffic_u0)} sellers*  ({_dp(traffic_wow, '%')})  {_si_pct(traffic_wow)}",
+        f"📈 Traffic (30d):     *{_fmt(traffic_u0)} sellers*  ({_dp(traffic_wow, '%')})  {_si_pct(traffic_wow)}",
         f"💡 A&P Engagement:  *{_pct(ap_eng)}*  ({_dp(ap_delta)})  {_si_pp(ap_delta)}",
         f"✅ Reco Adoption:    *{_pct(reco_adoption)}*  ({_dp(reco_delta)})  {_si_pp(reco_delta)}",
     ]

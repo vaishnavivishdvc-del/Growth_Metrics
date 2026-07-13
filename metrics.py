@@ -62,7 +62,9 @@ def _rate_baseline(baseline_windows: list[dict], num_keys, den_keys) -> list[flo
 
 # ── main computation ──────────────────────────────────────────────────────────
 
-def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) -> dict:
+def compute(fetched: list[dict],
+            monthly_traffic: dict[str, int] | None = None,
+            traffic_30d: dict | None = None) -> dict:
     """
     fetched[0] = this week (W0), fetched[1] = prev week (W1),
     fetched[2+] = older weeks for Z-score baseline (if available).
@@ -75,18 +77,29 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
     u0, t0 = w0["unique"], w0["total"]
     u1      = w1["unique"]
 
-    # ── Traffic Report Visits ─────────────────────────────────────────────────
+    # ── Traffic Report Visits (7-day, for Z-score baseline only) ─────────────
     traffic_u0 = _s(u0, TRAFFIC_EVENT)
     traffic_e0 = _s(t0, TRAFFIC_EVENT)
     traffic_u1 = _s(u1, TRAFFIC_EVENT)
-    traffic_wow_pct = round((traffic_u0 - traffic_u1) / traffic_u1 * 100, 1) if traffic_u1 else 0
 
-    # MAU: average monthly unique sellers across all complete months since launch
-    mau_values  = list((monthly_traffic or {}).values())
+    # ── Traffic Report Visits (30-day, primary L0 display) ───────────────────
+    t30 = traffic_30d or {}
+    traffic_30d_u0      = t30.get("u0", 0)
+    traffic_30d_u1      = t30.get("u1", 0)
+    traffic_30d_from0   = t30.get("from0", "")
+    traffic_30d_to0     = t30.get("to0", "")
+    traffic_30d_from1   = t30.get("from1", "")
+    traffic_30d_to1     = t30.get("to1", "")
+    traffic_30d_wow_pct = round((traffic_30d_u0 - traffic_30d_u1) / traffic_30d_u1 * 100, 1) if traffic_30d_u1 else 0
+
+    # MAU: complete months + current partial month (all from monthly_traffic)
     mau_months  = list((monthly_traffic or {}).keys())
-    traffic_mau = round(sum(mau_values) / len(mau_values)) if mau_values else 0
-    traffic_mau_months  = mau_months
-    traffic_mau_values  = mau_values   # per-month counts for the MAU detail line
+    mau_values  = list((monthly_traffic or {}).values())
+    # MAU average uses only complete calendar months (exclude the "so far" partial entry)
+    complete_values = [v for k, v in (monthly_traffic or {}).items() if "so far" not in k]
+    traffic_mau        = round(sum(complete_values) / len(complete_values)) if complete_values else 0
+    traffic_mau_months = mau_months
+    traffic_mau_values = mau_values
 
     # ── Pills ─────────────────────────────────────────────────────────────────
     PILL_CLICK_EVENTS = [
@@ -301,14 +314,22 @@ def compute(fetched: list[dict], monthly_traffic: dict[str, int] | None = None) 
         "period_from": w0["from"],
         "period_to":   w0["to"],
         "n_baseline":  n_baseline,
-        # traffic
-        "traffic_u0":         traffic_u0,
-        "traffic_e0":         traffic_e0,
-        "traffic_u1":         traffic_u1,
-        "traffic_wow_pct":    traffic_wow_pct,
-        "traffic_mau":        traffic_mau,
-        "traffic_mau_months": traffic_mau_months,
-        "traffic_mau_values": traffic_mau_values,
+        # traffic (7-day — for Z-score baseline)
+        "traffic_u0":           traffic_u0,
+        "traffic_e0":           traffic_e0,
+        "traffic_u1":           traffic_u1,
+        # traffic (30-day — L0 display)
+        "traffic_30d_u0":       traffic_30d_u0,
+        "traffic_30d_u1":       traffic_30d_u1,
+        "traffic_30d_from0":    traffic_30d_from0,
+        "traffic_30d_to0":      traffic_30d_to0,
+        "traffic_30d_from1":    traffic_30d_from1,
+        "traffic_30d_to1":      traffic_30d_to1,
+        "traffic_30d_wow_pct":  traffic_30d_wow_pct,
+        # MAU
+        "traffic_mau":          traffic_mau,
+        "traffic_mau_months":   traffic_mau_months,
+        "traffic_mau_values":   traffic_mau_values,
         # A&P combined engagement
         "ap_shown_u":       ap_shown_u,
         "ap_click_u":       ap_click_u,
