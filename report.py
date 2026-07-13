@@ -76,11 +76,20 @@ def _anomaly_blocks(anomalies: list[dict]) -> str:
 
 # ── table builder ─────────────────────────────────────────────────────────────
 
-def _stacked(curr, prev, is_pct: bool = False) -> str:
-    """Render current value with previous in small grey below — no extra column needed."""
-    fmt_curr = str(curr)
+def _stacked(curr, prev, is_pct: bool = False, chg: float | None = None) -> str:
+    """Render current value with previous + optional WoW change in small grey below."""
     fmt_prev = f"{prev}%" if is_pct else str(prev)
-    return f'{fmt_curr}<br><span style="font-size:11px;color:#999;">prev: {fmt_prev}</span>'
+    if chg is not None:
+        unit   = " pp" if is_pct else "%"
+        colour = "#c0392b" if chg < 0 else ("#27ae60" if chg > 0 else "#999")
+        chg_str = f' <span style="color:{colour};font-weight:bold;">({chg:+.1f}{unit})</span>'
+    else:
+        chg_str = ""
+    return f'{curr}<br><span style="font-size:11px;color:#999;">prev: {fmt_prev}{chg_str}</span>'
+
+
+def _wow_pct(curr: int, prev: int) -> float | None:
+    return round((curr - prev) / prev * 100, 1) if prev else None
 
 
 def _tbl(headers: list[str], rows: list[list]) -> str:
@@ -299,28 +308,31 @@ def _kpi_cards(m: dict) -> str:
         alert_rows_rca = [
             [
                 r["name"],
-                _stacked(_fmt(r["shown_u"]),  _fmt(r["prev_shown_u"])),
-                _stacked(_fmt(r["clicked_u"]), _fmt(r["prev_clicked_u"])),
-                _stacked(_pct(r["ctr"]),       _pct(r["prev_ctr"]), is_pct=True),
+                _stacked(_fmt(r["shown_u"]),   _fmt(r["prev_shown_u"]),
+                         chg=_wow_pct(r["shown_u"],   r["prev_shown_u"])),
+                _stacked(_fmt(r["clicked_u"]),  _fmt(r["prev_clicked_u"]),
+                         chg=_wow_pct(r["clicked_u"], r["prev_clicked_u"])),
+                _stacked(_pct(r["ctr"]),        _pct(r["prev_ctr"]),
+                         is_pct=True, chg=r["delta_pp"]),
                 f"{r['delta_pp']:+.1f} pp",
             ]
             for r in m["alert_rows"]
         ]
         # Pill rows (Losing Imp + Losing Conv)
-        pill_rows_rca = [
-            [
+        pill_rows_rca = []
+        for r in m["pill_click_rows"]:
+            this_ctr = round(r["clicked_u"] / r["shown_u"] * 100, 1) if r["shown_u"] else 0
+            prev_ctr = round(r["prev_u"] / r["prev_shown_u"] * 100, 1) if r["prev_shown_u"] else 0
+            pill_rows_rca.append([
                 r["name"],
-                _stacked(_fmt(r["shown_u"]),   _fmt(r["prev_shown_u"])),
-                _stacked(_fmt(r["clicked_u"]),  _fmt(r["prev_u"])),
-                _stacked(
-                    _pct(round(r["clicked_u"] / r["shown_u"] * 100, 1) if r["shown_u"] else 0),
-                    _pct(round(r["prev_u"] / r["prev_shown_u"] * 100, 1) if r["prev_shown_u"] else 0),
-                    is_pct=True,
-                ),
-                f"{round((r['clicked_u']/r['shown_u']*100 if r['shown_u'] else 0) - (r['prev_u']/r['prev_shown_u']*100 if r['prev_shown_u'] else 0), 1):+.1f} pp",
-            ]
-            for r in m["pill_click_rows"]
-        ]
+                _stacked(_fmt(r["shown_u"]),  _fmt(r["prev_shown_u"]),
+                         chg=_wow_pct(r["shown_u"], r["prev_shown_u"])),
+                _stacked(_fmt(r["clicked_u"]), _fmt(r["prev_u"]),
+                         chg=_wow_pct(r["clicked_u"], r["prev_u"])),
+                _stacked(_pct(this_ctr), _pct(prev_ctr),
+                         is_pct=True, chg=round(this_ctr - prev_ctr, 1)),
+                f"{round(this_ctr - prev_ctr, 1):+.1f} pp",
+            ])
 
         rca_parts.append(
             f'<h3>A&amp;P Engagement Drop — RCA</h3>'
@@ -339,17 +351,23 @@ def _kpi_cards(m: dict) -> str:
         rca_tbl = [
             [
                 "Price Recos (All)",
-                _stacked(_fmt(m["price_shown_u"]),  _fmt(m.get("prev_price_shown_u", 0))),
-                _stacked(_fmt(m["price_applied_u"]), _fmt(m.get("prev_price_applied_u", 0))),
-                _stacked(_pct(price_adp), _pct(prev_price_adp), is_pct=True),
+                _stacked(_fmt(m["price_shown_u"]),  _fmt(m.get("prev_price_shown_u", 0)),
+                         chg=_wow_pct(m["price_shown_u"], m.get("prev_price_shown_u", 0))),
+                _stacked(_fmt(m["price_applied_u"]), _fmt(m.get("prev_price_applied_u", 0)),
+                         chg=_wow_pct(m["price_applied_u"], m.get("prev_price_applied_u", 0))),
+                _stacked(_pct(price_adp), _pct(prev_price_adp),
+                         is_pct=True, chg=round(price_adp - prev_price_adp, 1)),
                 f"{round(price_adp - prev_price_adp, 1):+.1f} pp",
             ]
         ] + [
             [
                 r["name"],
-                _stacked(_fmt(r["shown_u"]),  _fmt(r["prev_shown_u"])),
-                _stacked(_fmt(r["applied_u"]), _fmt(r["prev_applied_u"])),
-                _stacked(_pct(r["adoption"]),  _pct(r["prev_adoption"]), is_pct=True),
+                _stacked(_fmt(r["shown_u"]),  _fmt(r["prev_shown_u"]),
+                         chg=_wow_pct(r["shown_u"], r["prev_shown_u"])),
+                _stacked(_fmt(r["applied_u"]), _fmt(r["prev_applied_u"]),
+                         chg=_wow_pct(r["applied_u"], r["prev_applied_u"])),
+                _stacked(_pct(r["adoption"]),  _pct(r["prev_adoption"]),
+                         is_pct=True, chg=round(r["adoption"] - r["prev_adoption"], 1)),
                 f"{round(r['adoption'] - r['prev_adoption'], 1):+.1f} pp",
             ]
             for r in m["rest_reco_rows"]
@@ -359,9 +377,12 @@ def _kpi_cards(m: dict) -> str:
         price_sub_rca = [
             [
                 p["name"],
-                _stacked(_fmt(p["shown_u"]),  _fmt(p["prev_shown_u"])),
-                _stacked(_fmt(p["applied_u"]), _fmt(p["prev_applied_u"])),
-                _stacked(_pct(p["adoption"]),  _pct(p["prev_adoption"]), is_pct=True),
+                _stacked(_fmt(p["shown_u"]),  _fmt(p["prev_shown_u"]),
+                         chg=_wow_pct(p["shown_u"], p["prev_shown_u"])),
+                _stacked(_fmt(p["applied_u"]), _fmt(p["prev_applied_u"]),
+                         chg=_wow_pct(p["applied_u"], p["prev_applied_u"])),
+                _stacked(_pct(p["adoption"]),  _pct(p["prev_adoption"]),
+                         is_pct=True, chg=round(p["adoption"] - p["prev_adoption"], 1)),
                 f"{round(p['adoption'] - p['prev_adoption'], 1):+.1f} pp",
             ]
             for p in m["price_sub"]
@@ -626,36 +647,12 @@ def build_chat_text(m: dict) -> str:
     lines = [
         f"*📊 GC Brief — {period}*",
         "",
-        f"📈 Traffic (30d):     *{_fmt(traffic_u0)} sellers*  ({_dp(traffic_wow, '%')})  {_si_pct(traffic_wow)}",
-        f"💡 A&P Engagement:  *{_pct(ap_eng)}*  ({_dp(ap_delta)})  {_si_pp(ap_delta)}",
         f"✅ Reco Adoption:    *{_pct(reco_adoption)}*  ({_dp(reco_delta)})  {_si_pp(reco_delta)}",
+        f"💡 A&P Engagement:  *{_pct(ap_eng)}*  ({_dp(ap_delta)})  {_si_pp(ap_delta)}",
+        f"📈 Traffic (30d):   *{_fmt(traffic_u0)} sellers*  ({_dp(traffic_wow, '%')})  {_si_pct(traffic_wow)}",
+        "",
+        "_Full report sent via email._",
     ]
-
-    if ap_delta < -1:
-        alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
-        prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
-        pill_ctr      = m["pill_click_rate"]
-        prev_pill_ctr = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
-        lines += ["", "*A&P Engagement Drop — breakdown:*",
-                  f"  🔔 Alert CTR:  {_pct(alert_ctr)}  ({alert_ctr - prev_alert_ctr:+.1f} pp)",
-                  f"  💊 Pill CTR:   {_pct(pill_ctr)}  ({pill_ctr - prev_pill_ctr:+.1f} pp)"]
-
-    if reco_delta < -1:
-        price_adp = round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0
-        prev_price_adp = round(m.get("prev_price_applied_u", 0) / m["prev_price_shown_u"] * 100, 1) if m.get("prev_price_shown_u") else 0
-        all_recos = [("Price Recos", price_adp, prev_price_adp)] + [
-            (r["name"], r["adoption"], r["prev_adoption"]) for r in m["rest_reco_rows"]
-        ]
-        lines += ["", "*Reco Adoption — by Type:*"]
-        for name, adp, prev_adp in all_recos:
-            d = round(adp - prev_adp, 1)
-            lines.append(f"  {_si_pp(d)} {name}: *{_pct(adp)}*  ({_dp(d)})")
-        biggest = max(all_recos, key=lambda x: abs(x[1] - x[2]))
-        bname, badp, bprev = biggest
-        bd = round(badp - bprev, 1)
-        lines.append(f"Biggest drop: {bname} ({bd:+.1f} pp WoW)")
-
-    lines += ["", "_Full report sent via email._"]
     return "\n".join(lines)
 
 
