@@ -76,6 +76,13 @@ def _anomaly_blocks(anomalies: list[dict]) -> str:
 
 # ── table builder ─────────────────────────────────────────────────────────────
 
+def _stacked(curr, prev, is_pct: bool = False) -> str:
+    """Render current value with previous in small grey below — no extra column needed."""
+    fmt_curr = str(curr)
+    fmt_prev = f"{prev}%" if is_pct else str(prev)
+    return f'{fmt_curr}<br><span style="font-size:11px;color:#999;">prev: {fmt_prev}</span>'
+
+
 def _tbl(headers: list[str], rows: list[list]) -> str:
     th = "".join(f"<th>{h}</th>" for h in headers)
     body = ""
@@ -254,52 +261,82 @@ def _kpi_cards(m: dict) -> str:
 
     rca_parts = []
 
+    pf, pt = m["period_from"], m["period_to"]
+    # Derive prev week dates from the W1 window stored in alert_rows context
+    # (W1 = 7 days before W0)
+    from datetime import date as _date, timedelta as _td
+    try:
+        _w0_end  = _date.fromisoformat(pt)
+        _w1_end  = _w0_end - _td(weeks=1)
+        _w1_from = _w1_end - _td(days=6)
+        prev_period = f"{_w1_from} – {_w1_end}"
+    except Exception:
+        prev_period = "prev week"
+
     if ap_delta < -1:
-        # Identify whether alerts or pills drove the drop
         alert_ctr      = round(m["tot_alert_clicked_u"] / m["tot_alert_shown_u"] * 100, 1) if m["tot_alert_shown_u"] else 0
         prev_alert_ctr = round(m["prev_alert_clicked_u"] / m["prev_alert_shown_u"] * 100, 1) if m["prev_alert_shown_u"] else 0
         pill_ctr       = m["pill_click_rate"]
         prev_pill_ctr  = round(m["prev_pills_clicked_u"] / m["prev_pills_shown_u"] * 100, 1) if m["prev_pills_shown_u"] else 0
 
-        # Denominator vs Numerator analysis
-        shown_wow  = round((m["ap_shown_u"] - (m["prev_pills_shown_u"] + m["prev_alert_shown_u"])) / (m["prev_pills_shown_u"] + m["prev_alert_shown_u"]) * 100, 1) if (m["prev_pills_shown_u"] + m["prev_alert_shown_u"]) else 0
-        click_wow  = round((m["ap_click_u"] - (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"])) / (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"]) * 100, 1) if (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"]) else 0
+        shown_wow = round((m["ap_shown_u"] - (m["prev_pills_shown_u"] + m["prev_alert_shown_u"])) / (m["prev_pills_shown_u"] + m["prev_alert_shown_u"]) * 100, 1) if (m["prev_pills_shown_u"] + m["prev_alert_shown_u"]) else 0
+        click_wow = round((m["ap_click_u"] - (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"])) / (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"]) * 100, 1) if (m["prev_pills_clicked_u"] + m["prev_alert_clicked_u"]) else 0
 
         if shown_wow < -10:
-            driver = f"Denominator-driven (reach): shown unique sellers fell {shown_wow:+.1f}% WoW — trigger/eligibility change suspected."
+            driver = f"Denominator-driven: reach fell {shown_wow:+.1f}% WoW — fewer sellers triggered alerts/pills."
         elif click_wow < -10:
-            driver = f"Numerator-driven (engagement): shown stable, but clicks fell {click_wow:+.1f}% WoW — sellers seeing but not acting."
+            driver = f"Numerator-driven: reach stable, clicks fell {click_wow:+.1f}% WoW — sellers seeing but not acting."
         else:
-            driver = f"Combined: shown {shown_wow:+.1f}% WoW, clicks {click_wow:+.1f}% WoW."
+            driver = f"Combined: reach {shown_wow:+.1f}% WoW, clicks {click_wow:+.1f}% WoW."
 
-        rca_tbl = [[r["name"], _fmt(r["shown_u"]), _fmt(r["shown_t"]),
-                    _fmt(r["clicked_u"]), _fmt(r["clicked_t"]),
-                    _pct(r["ctr"]), _pct(r["prev_ctr"]), f"{r['delta_pp']:+.1f} pp"]
-                   for r in m["alert_rows"]]
+        # Stacked cells: current / prev in grey below — no extra columns
+        rca_tbl = [
+            [
+                r["name"],
+                _stacked(_fmt(r["shown_u"]),   _fmt(r["prev_shown_u"])),
+                _stacked(_fmt(r["clicked_u"]),  _fmt(r["prev_clicked_u"])),
+                _stacked(_pct(r["ctr"]),        _pct(r["prev_ctr"]), is_pct=True),
+                f"{r['delta_pp']:+.1f} pp",
+            ]
+            for r in m["alert_rows"]
+        ]
         rca_parts.append(
-            f"<h3>A&amp;P Engagement Drop — RCA</h3>"
-            f"<p><b>Driver:</b> {driver}</p>"
-            f"<p>Alert CTR: {_pct(alert_ctr)} ({alert_ctr - prev_alert_ctr:+.1f} pp) | "
-            f"Pill CTR: {_pct(pill_ctr)} ({pill_ctr - prev_pill_ctr:+.1f} pp)</p>"
-            + _tbl(["Alert Type", "Shown (Unique)", "Shown (Events)",
-                    "Clicked (Unique)", "Clicked (Events)", "CTR", "Prev CTR", "Δ pp"], rca_tbl)
+            f'<h3>A&amp;P Engagement Drop — RCA</h3>'
+            f'<p style="font-size:11px;color:#888;">This week: {pf}–{pt} &nbsp;|&nbsp; Prev week: {prev_period} (grey)</p>'
+            f'<p><b>Driver:</b> {driver}</p>'
+            f'<p>Alert CTR: {_pct(alert_ctr)} ({alert_ctr - prev_alert_ctr:+.1f} pp)&nbsp;&nbsp;|&nbsp;&nbsp;'
+            f'Pill CTR: {_pct(pill_ctr)} ({pill_ctr - prev_pill_ctr:+.1f} pp)</p>'
+            + _tbl(["Alert Type", "Sellers Shown", "Sellers Clicked", "CTR", "Δ pp"], rca_tbl)
         )
 
     if reco_delta < -1:
         price_adp      = round(m["price_applied_u"] / m["price_shown_u"] * 100, 1) if m["price_shown_u"] else 0
-        prev_price_adp = round(m.get("prev_price_applied_u", 0) / m["prev_price_shown_u"] * 100, 1) if m.get("prev_price_shown_u") else 0
+        prev_price_adp = round(m.get("prev_price_applied_u", 0) / m.get("prev_price_shown_u", 1) * 100, 1) if m.get("prev_price_shown_u") else 0
+        price_driver   = "Den ↓" if m["price_shown_u"] < m.get("prev_price_shown_u", m["price_shown_u"]) * 0.9 else "Num/Rate ↓"
+
         rca_tbl = [
-            ["Price Recos (All)", _fmt(m["price_shown_u"]), _fmt(m["price_applied_u"]),
-             _pct(price_adp), f"{round(price_adp - prev_price_adp, 1):+.1f} pp",
-             "Den" if m["price_shown_u"] < m.get("prev_price_shown_u", m["price_shown_u"]) * 0.9 else "Num/Rate"]
+            [
+                "Price Recos (All)",
+                _stacked(_fmt(m["price_shown_u"]),   _fmt(m.get("prev_price_shown_u", 0))),
+                _stacked(_fmt(m["price_applied_u"]),  _fmt(m.get("prev_price_applied_u", 0))),
+                _stacked(_pct(price_adp), _pct(prev_price_adp), is_pct=True),
+                f"{round(price_adp - prev_price_adp, 1):+.1f} pp",
+                price_driver,
+            ]
         ] + [
-            [r["name"], _fmt(r["shown_u"]), _fmt(r["applied_u"]),
-             _pct(r["adoption"]), f"{round(r['adoption'] - r['prev_adoption'], 1):+.1f} pp",
-             "Den" if r["shown_u"] < r.get("prev_shown_u", r["shown_u"]) * 0.8 else "Num/Rate"]
+            [
+                r["name"],
+                _stacked(_fmt(r["shown_u"]),   _fmt(r["prev_shown_u"])),
+                _stacked(_fmt(r["applied_u"]),  _fmt(r["prev_applied_u"])),
+                _stacked(_pct(r["adoption"]),   _pct(r["prev_adoption"]), is_pct=True),
+                f"{round(r['adoption'] - r['prev_adoption'], 1):+.1f} pp",
+                "Den ↓" if r["shown_u"] < r["prev_shown_u"] * 0.8 else "Num/Rate ↓",
+            ]
             for r in m["rest_reco_rows"]
         ]
         rca_parts.append(
-            "<h3>Reco Adoption Drop — RCA by Reco Type</h3>"
+            '<h3>Reco Adoption Drop — RCA by Reco Type</h3>'
+            f'<p style="font-size:11px;color:#888;">This week: {pf}–{pt} &nbsp;|&nbsp; Prev week: {prev_period} (grey)</p>'
             + _tbl(["Reco Type", "Sellers Shown", "Sellers Applied", "Adoption %", "Δ pp", "Driver"], rca_tbl)
         )
 
