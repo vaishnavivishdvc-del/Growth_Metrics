@@ -170,43 +170,90 @@ function main() {{
     return monthly
 
 
-def _or_unique_jql(from_date: str, to_date: str, events: list[str]) -> int:
+# Bitmask assignments for OR groups — each group gets a dedicated bit.
+# All 8 groups are resolved in a SINGLE JQL call per window to stay within
+# Mixpanel's rolling rate limit.
+_OR_BITMASK: dict[str, int] = {
+    "pill_shown_or":    1,
+    "pill_click_or":    2,
+    "alert_shown_or":   4,
+    "alert_click_or":   8,
+    "ap_shown_or":     16,   # derived: pill_shown_or | alert_shown_or
+    "ap_click_or":     32,   # derived: pill_click_or | alert_click_or
+    "recco_shown_or":  64,
+    "recco_applied_or":128,
+}
+
+
+def _or_uniques_jql(from_date: str, to_date: str) -> dict[str, int]:
     """
-    OR-deduplicated unique seller count across all listed events.
-    A seller who triggered multiple events in the list is counted exactly once.
-    Uses groupByUser([], any()) → one row per distinct_id → reduce(count()).
+    Compute OR-deduplicated unique sellers for ALL 8 OR groups in ONE JQL call.
+
+    Each seller is assigned a bitmask integer encoding which OR groups they belong
+    to.  `groupBy` returns a frequency histogram of bitmasks; Python then sums
+    counts across every bitmask that has a given group's bit set.
+
+    This replaces 8 separate JQL calls with 1, keeping total requests per run
+    well within Mixpanel's rolling rate limit.
     """
-    selectors = json.dumps([{"event": e} for e in events])
+    def _js_arr(events: list[str]) -> str:
+        return "[" + ",".join(f"'{e}'" for e in events) + "]"
+
+    pill_shown_js  = _js_arr(OR_QUERY_GROUPS["pill_shown_or"])
+    pill_click_js  = _js_arr(OR_QUERY_GROUPS["pill_click_or"])
+    alert_shown_js = _js_arr(OR_QUERY_GROUPS["alert_shown_or"])
+    alert_click_js = _js_arr(OR_QUERY_GROUPS["alert_click_or"])
+    recco_shown_js = _js_arr(OR_QUERY_GROUPS["recco_shown_or"])
+    recco_appl_js  = _js_arr(OR_QUERY_GROUPS["recco_applied_or"])
+
+    # Union of all events across all OR groups (deduped, used as event_selectors)
+    all_or_events = list(dict.fromkeys(
+        e for evts in OR_QUERY_GROUPS.values() for e in evts
+    ))
+    selectors = json.dumps([{"event": e} for e in all_or_events])
+
     script = f"""
+function containsAny(seen, names) {{
+  for (var i = 0; i < names.length; i++) {{
+    if (seen[names[i]]) return true;
+  }}
+  return false;
+}}
 function main() {{
   return Events({{
     from_date: '{from_date}',
     to_date: '{to_date}',
     event_selectors: {selectors}
-  }}).groupByUser([], mixpanel.reducer.any())
-  .groupBy([], mixpanel.reducer.count());
+  }}).groupByUser([function(events) {{
+    var seen = {{}};
+    events.forEach(function(e) {{ seen[e.name] = true; }});
+    var b = 0;
+    if (containsAny(seen, {pill_shown_js}))  b |= 1;
+    if (containsAny(seen, {pill_click_js}))  b |= 2;
+    if (containsAny(seen, {alert_shown_js})) b |= 4;
+    if (containsAny(seen, {alert_click_js})) b |= 8;
+    if (b & 5)  b |= 16;
+    if (b & 10) b |= 32;
+    if (containsAny(seen, {recco_shown_js})) b |= 64;
+    if (containsAny(seen, {recco_appl_js}))  b |= 128;
+    return b;
+  }}], mixpanel.reducer.any())
+  .groupBy(['key.0'], mixpanel.reducer.count());
 }}"""
+
     rows = _jql(script)
-    # .groupBy([], count()) → [{"key": [], "value": N}]
-    if isinstance(rows, list) and rows:
-        r = rows[0]
-        if isinstance(r, dict):
-            return int(r.get("value", 0))
-        if isinstance(r, (int, float)):
-            return int(r)
-    return 0
+    log.info("OR-dedup bitmask histogram: %d distinct bitmasks (%s → %s)",
+             len(rows), from_date, to_date)
 
-
-def _fetch_or_uniques(from_date: str, to_date: str) -> dict[str, int]:
-    """
-    Fetch OR-dedup unique seller counts for every group defined in OR_QUERY_GROUPS.
-    Queries are run sequentially to stay within Mixpanel's concurrent-request limit.
-    """
-    results: dict[str, int] = {}
-    for key, events in OR_QUERY_GROUPS.items():
-        log.info("OR-dedup query: %s (%s → %s)", key, from_date, to_date)
-        results[key] = _or_unique_jql(from_date, to_date, events)
-    return results
+    # Decode histogram → per-group counts
+    result = {k: 0 for k in _OR_BITMASK}
+    for row in rows:
+        bitmask = row.get("key", [0])[0]
+        count   = row.get("value", 0)
+        for key, bit in _OR_BITMASK.items():
+            if bitmask & bit:
+                result[key] += count
+    return result
 
 
 def get_windows(n_weeks: int = 5) -> list[tuple[str, str]]:
@@ -235,7 +282,7 @@ def fetch_all_windows(windows: list[tuple[str, str]]) -> list[dict]:
         log.info("Fetching window %s → %s", from_date, to_date)
         tot     = _totals_jql(from_date, to_date)
         uniq    = _uniques_jql(from_date, to_date)
-        or_uniq = _fetch_or_uniques(from_date, to_date)
+        or_uniq = _or_uniques_jql(from_date, to_date)   # 1 call for all 8 OR groups
         return idx, {"total": tot, "unique": uniq, "or": or_uniq, "from": from_date, "to": to_date}
 
     # max_workers=2 → at most 2 windows fetched in parallel = max 2 concurrent JQL
