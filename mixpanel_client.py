@@ -26,8 +26,9 @@ JQL_URL = "https://eu.mixpanel.com/api/2.0/jql"
 _SELECTORS = json.dumps([{"event": e} for e in ALL_EVENTS])
 
 
-_MAX_RETRIES = 4
-_RETRY_WAIT  = 70   # seconds — just over Mixpanel's 60-s rolling window
+_MAX_RETRIES  = 5
+_RETRY_WAIT   = 120   # seconds — 2× Mixpanel's ~60-s rolling window for safety
+_INTER_QUERY_SLEEP = 1  # seconds between consecutive JQL calls within a window
 
 
 def _jql(script: str) -> list:
@@ -280,15 +281,16 @@ def fetch_all_windows(windows: list[tuple[str, str]]) -> list[dict]:
 
     def _fetch(idx: int, from_date: str, to_date: str):
         log.info("Fetching window %s → %s", from_date, to_date)
-        tot     = _totals_jql(from_date, to_date)
-        uniq    = _uniques_jql(from_date, to_date)
-        or_uniq = _or_uniques_jql(from_date, to_date)   # 1 call for all 8 OR groups
+        tot = _totals_jql(from_date, to_date)
+        time.sleep(_INTER_QUERY_SLEEP)
+        uniq = _uniques_jql(from_date, to_date)
+        time.sleep(_INTER_QUERY_SLEEP)
+        or_uniq = _or_uniques_jql(from_date, to_date)   # 1 bitmask call for all 8 OR groups
         return idx, {"total": tot, "unique": uniq, "or": or_uniq, "from": from_date, "to": to_date}
 
-    # max_workers=2 → at most 2 windows fetched in parallel = max 2 concurrent JQL
-    # queries at a time (totals + uniques inside each thread run sequentially).
-    # Mixpanel allows 5 concurrent and 60/hour; this keeps us comfortably under both.
-    with ThreadPoolExecutor(max_workers=2) as ex:
+    # max_workers=1 → windows processed sequentially, one JQL at a time.
+    # Prevents request bursts that trip Mixpanel's rolling rate limit.
+    with ThreadPoolExecutor(max_workers=1) as ex:
         futures = {
             ex.submit(_fetch, i, f, t): i
             for i, (f, t) in enumerate(windows)
