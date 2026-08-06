@@ -264,8 +264,9 @@ def _kpi_cards(m: dict) -> str:
         f'Traffic MAU (complete months avg): <b>{_fmt(traffic_mau)} sellers/month</b>'
         f' — {mau_detail}</p>'
         '<p style="font-size:11px;color:#888;margin:0 0 16px;">'
-        'Rates: unique sellers basis. A&amp;P Engagement = (alert clicks + pill clicks) ÷ (alerts shown + pills shown). '
-        'Reco Adoption = applied unique ÷ shown unique.</p>'
+        'Rates: OR-deduplicated unique sellers. A&amp;P Engagement = OR-unique sellers who clicked any pill or alert ÷ '
+        'OR-unique sellers shown any pill or alert. Reco Adoption = OR-unique sellers who acted on any reco ÷ '
+        'OR-unique sellers shown any reco. Sellers shown multiple variants are counted once.</p>'
     )
 
     rca_parts = []

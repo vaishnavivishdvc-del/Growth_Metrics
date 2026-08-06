@@ -101,6 +101,35 @@ def compute(fetched: list[dict],
     traffic_mau_months = mau_months
     traffic_mau_values = mau_values
 
+    # ── OR-dedup values (true union unique sellers per group) ─────────────────
+    # or0/or1: from the OR queries fetched per window (see mixpanel_client._fetch_or_uniques)
+    # Fall back to summed per-variant uniques only when OR data is unavailable (legacy windows).
+    or0 = w0.get("or", {})
+    or1 = w1.get("or", {})
+
+    def _or(d: dict, key: str, fallback_keys: list[str], u: dict) -> int:
+        """Return OR-dedup value if present, else sum per-variant (fallback)."""
+        v = d.get(key)
+        return v if v is not None else _sum(u, fallback_keys)
+
+    pill_shown_or  = _or(or0, "pill_shown_or",  PILLS_SHOWN,   u0)
+    pill_click_or  = _or(or0, "pill_click_or",  PILLS_CLICKED, u0)
+    alert_shown_or = _or(or0, "alert_shown_or", ALERTS_SHOWN,  u0)
+    alert_click_or = _or(or0, "alert_click_or", ALERTS_CLICKED, u0)
+    ap_shown_or    = _or(or0, "ap_shown_or",    PILLS_SHOWN + ALERTS_SHOWN,    u0)
+    ap_click_or    = _or(or0, "ap_click_or",    PILLS_CLICKED + ALERTS_CLICKED, u0)
+    recco_shown_or  = _or(or0, "recco_shown_or",   PRICE_RECOS_SHOWN + REST_RECOS_SHOWN[:2], u0)
+    recco_applied_or = _or(or0, "recco_applied_or", PRICE_RECOS_APPLIED + ["gc_fa_recco_applied", "gc_nfbf_oos_recco_applied"], u0)
+
+    prev_pill_shown_or  = _or(or1, "pill_shown_or",  PILLS_SHOWN,   u1)
+    prev_pill_click_or  = _or(or1, "pill_click_or",  PILLS_CLICKED, u1)
+    prev_alert_shown_or = _or(or1, "alert_shown_or", ALERTS_SHOWN,  u1)
+    prev_alert_click_or = _or(or1, "alert_click_or", ALERTS_CLICKED, u1)
+    prev_ap_shown_or    = _or(or1, "ap_shown_or",    PILLS_SHOWN + ALERTS_SHOWN,    u1)
+    prev_ap_click_or    = _or(or1, "ap_click_or",    PILLS_CLICKED + ALERTS_CLICKED, u1)
+    prev_recco_shown_or  = _or(or1, "recco_shown_or",   PRICE_RECOS_SHOWN + REST_RECOS_SHOWN[:2], u1)
+    prev_recco_applied_or = _or(or1, "recco_applied_or", PRICE_RECOS_APPLIED + ["gc_fa_recco_applied", "gc_nfbf_oos_recco_applied"], u1)
+
     # ── Pills ─────────────────────────────────────────────────────────────────
     PILL_CLICK_EVENTS = [
         "gc_losing_imp_listings_filter_click",
@@ -152,17 +181,18 @@ def compute(fetched: list[dict],
         for e in OTHER_PILLS_VIEWED
     ]
 
-    tot_pills_shown_u  = _sum(u0, PILLS_SHOWN)
-    tot_pills_shown_t  = _sum(t0, PILLS_SHOWN)
-    tot_pills_clicked_u = _sum(u0, PILL_CLICK_EVENTS)
+    # L0 KPI totals use OR-dedup values (true union, not sum per variant)
+    tot_pills_shown_u   = pill_shown_or
+    tot_pills_clicked_u = pill_click_or
+    tot_pills_shown_t   = _sum(t0, PILLS_SHOWN)    # events total unchanged
     tot_pills_clicked_t = _sum(t0, PILL_CLICK_EVENTS)
 
     # supplementary reach totals (for report tables only — not part of engagement rate)
     tot_other_pills_shown_u  = _sum(u0, OTHER_PILLS_SHOWN)
     tot_other_pills_viewed_u = _sum(u0, OTHER_PILLS_VIEWED)
 
-    prev_pills_shown_u   = _sum(u1, PILLS_SHOWN)
-    prev_pills_clicked_u = _sum(u1, PILL_CLICK_EVENTS)
+    prev_pills_shown_u   = prev_pill_shown_or
+    prev_pills_clicked_u = prev_pill_click_or
 
     pill_click_rate = _pct(tot_pills_clicked_u, tot_pills_shown_u)
 
@@ -184,22 +214,25 @@ def compute(fetched: list[dict],
             "delta_pp": round(ctr - prev_ctr, 1),
         })
 
-    tot_alert_shown_u   = _sum(u0, ALERTS_SHOWN)
-    tot_alert_clicked_u = _sum(u0, ALERTS_CLICKED)
+    # L0 alert totals: OR-dedup (sellers shown multiple alert types counted once)
+    tot_alert_shown_u   = alert_shown_or
+    tot_alert_clicked_u = alert_click_or
     tot_alert_shown_t   = _sum(t0, ALERTS_SHOWN)
     tot_alert_clicked_t = _sum(t0, ALERTS_CLICKED)
-    tot_prev_shown_u    = _sum(u1, ALERTS_SHOWN)
-    tot_prev_clicked_u  = _sum(u1, ALERTS_CLICKED)
+    tot_prev_shown_u    = prev_alert_shown_or
+    tot_prev_clicked_u  = prev_alert_click_or
 
-    # ── Alerts & Pills combined (L0 Engagement Rate) ──────────────────────────
-    ap_shown_u = tot_pills_shown_u + tot_alert_shown_u
-    ap_click_u = tot_pills_clicked_u + tot_alert_clicked_u
-    ap_eng_rate = _pct(ap_click_u, ap_shown_u)
-
-    prev_ap_shown_u = prev_pills_shown_u + _sum(u1, ALERTS_SHOWN)
-    prev_ap_click_u = prev_pills_clicked_u + _sum(u1, ALERTS_CLICKED)
+    # ── Alerts & Pills combined (L0 Engagement Rate) — OR-dedup ──────────────
+    # ap_shown_or = unique sellers who saw any pill OR any alert (true union)
+    # Do NOT sum tot_pills_shown_u + tot_alert_shown_u — that double-counts sellers
+    # who received both a pill and an alert.
+    ap_shown_u       = ap_shown_or
+    ap_click_u       = ap_click_or
+    ap_eng_rate      = _pct(ap_click_u, ap_shown_u)
+    prev_ap_shown_u  = prev_ap_shown_or
+    prev_ap_click_u  = prev_ap_click_or
     prev_ap_eng_rate = _pct(prev_ap_click_u, prev_ap_shown_u)
-    ap_eng_delta = round(ap_eng_rate - prev_ap_eng_rate, 1)
+    ap_eng_delta     = round(ap_eng_rate - prev_ap_eng_rate, 1)
 
     # ── Price recos ───────────────────────────────────────────────────────────
     price_sub = []
@@ -244,40 +277,84 @@ def compute(fetched: list[dict],
     rest_shown_u   = _sum(u0, REST_RECOS_SHOWN)
     rest_applied_u = _sum(u0, REST_RECOS_APPLIED)
 
-    # ── Totals (recos) ────────────────────────────────────────────────────────
-    tot_reco_shown_u   = price_shown_u + rest_shown_u
-    tot_reco_applied_u = price_applied_u + rest_applied_u
+    # ── Totals (recos) — OR-dedup additive approx ────────────────────────────
+    # recco_shown_or: OR across 6 types (buy_now, inc_vis, conv_price, value_tag, fa, suppression)
+    # NFBF OOS uses a different event suffix (gc_nfbf_oos_recco_triggered) — fetched separately
+    # Combined denominator = recco_shown_or + nfbf_triggered (additive; slight over-count
+    # due to sellers shown both a recco_shown type AND NFBF; approx. ~1–2 pp below true native OR)
+    nfbf_shown_u         = _s(u0, "gc_nfbf_oos_recco_triggered")
+    prev_nfbf_shown_u    = _s(u1, "gc_nfbf_oos_recco_triggered")
+    # recco_applied_or: OR across 6 types (all _applied + nfbf_oos_applied)
+    # Suppression uses a different event suffix (gc_suppression_recco_clicked) — fetched separately
+    supp_clicked_u       = _s(u0, "gc_suppression_recco_clicked")
+    prev_supp_clicked_u  = _s(u1, "gc_suppression_recco_clicked")
+
+    tot_reco_shown_u    = recco_shown_or + nfbf_shown_u
+    tot_reco_applied_u  = recco_applied_or + supp_clicked_u
+    prev_reco_shown_u   = prev_recco_shown_or + prev_nfbf_shown_u
+    prev_reco_applied_u = prev_recco_applied_or + prev_supp_clicked_u
+
     tot_reco_shown_t   = price_shown_t + _sum(t0, REST_RECOS_SHOWN)
     tot_reco_applied_t = price_applied_t + _sum(t0, REST_RECOS_APPLIED)
-
-    prev_reco_shown_u   = _sum(u1, PRICE_RECOS_SHOWN) + _sum(u1, REST_RECOS_SHOWN)
-    prev_reco_applied_u = _sum(u1, PRICE_RECOS_APPLIED) + _sum(u1, REST_RECOS_APPLIED)
 
     # ── Z-scores ──────────────────────────────────────────────────────────────
     fa_ctr         = _pct(_s(u0, "gc_fa_recco_applied"), _s(u0, "gc_fa_recco_shown"))
     supp_ctr       = _pct(_s(u0, "gc_suppression_recco_clicked"), _s(u0, "gc_suppression_recco_shown"))
     overall_reco_ctr = _pct(tot_reco_applied_u, tot_reco_shown_u)
 
+    # ── Z-score baseline helpers (OR-dedup where available) ───────────────────
     def _ap_baseline(bws):
-        """A&P Engagement Rate across baseline windows (unique basis)."""
+        """A&P Engagement Rate — OR-dedup across baseline windows."""
         rates = []
         for bw in bws:
-            bu = bw["unique"]
-            num = _sum(bu, PILL_CLICK_EVENTS) + _sum(bu, ALERTS_CLICKED)
-            den = _sum(bu, PILLS_SHOWN) + _sum(bu, ALERTS_SHOWN)
+            bor = bw.get("or", {})
+            den = bor.get("ap_shown_or") if bor.get("ap_shown_or") else (
+                _sum(bw["unique"], PILLS_SHOWN) + _sum(bw["unique"], ALERTS_SHOWN))
+            num = bor.get("ap_click_or") if bor.get("ap_click_or") else (
+                _sum(bw["unique"], PILL_CLICK_EVENTS) + _sum(bw["unique"], ALERTS_CLICKED))
+            rates.append(_pct(num, den))
+        return rates
+
+    def _pill_baseline(bws):
+        """Pill CTR — OR-dedup across baseline windows."""
+        rates = []
+        for bw in bws:
+            bor = bw.get("or", {})
+            den = bor.get("pill_shown_or") or _sum(bw["unique"], PILLS_SHOWN)
+            num = bor.get("pill_click_or") or _sum(bw["unique"], PILLS_CLICKED)
+            rates.append(_pct(num, den))
+        return rates
+
+    def _alert_baseline(bws):
+        """Alert CTR — OR-dedup across baseline windows."""
+        rates = []
+        for bw in bws:
+            bor = bw.get("or", {})
+            den = bor.get("alert_shown_or") or _sum(bw["unique"], ALERTS_SHOWN)
+            num = bor.get("alert_click_or") or _sum(bw["unique"], ALERTS_CLICKED)
+            rates.append(_pct(num, den))
+        return rates
+
+    def _reco_baseline(bws):
+        """Overall Reco Adoption — OR-dedup (additive approx) across baseline windows."""
+        rates = []
+        for bw in bws:
+            bor = bw.get("or", {})
+            bu  = bw["unique"]
+            rso = bor.get("recco_shown_or") or _sum(bu, PRICE_RECOS_SHOWN + REST_RECOS_SHOWN[:2])
+            rao = bor.get("recco_applied_or") or _sum(bu, PRICE_RECOS_APPLIED + [
+                "gc_fa_recco_applied", "gc_nfbf_oos_recco_applied"])
+            den = rso + _s(bu, "gc_nfbf_oos_recco_triggered")
+            num = rao + _s(bu, "gc_suppression_recco_clicked")
             rates.append(_pct(num, den))
         return rates
 
     zscore_specs = [
-        ("A&P Engagement Rate", ap_eng_rate, _ap_baseline(baseline)),
-        ("Pill Engagement Rate", pill_click_rate,
-         _rate_baseline(baseline, PILL_CLICK_EVENTS, PILLS_SHOWN)),
-        ("Alert Engagement Rate",
-         _pct(tot_alert_clicked_u, tot_alert_shown_u),
-         _rate_baseline(baseline, ALERTS_CLICKED, ALERTS_SHOWN)),
-        ("Overall Reco Adoption", overall_reco_ctr,
-         _rate_baseline(baseline, PRICE_RECOS_APPLIED + REST_RECOS_APPLIED,
-                        PRICE_RECOS_SHOWN + REST_RECOS_SHOWN)),
+        ("A&P Engagement Rate",  ap_eng_rate,      _ap_baseline(baseline)),
+        ("Pill Engagement Rate",  pill_click_rate,  _pill_baseline(baseline)),
+        ("Alert Engagement Rate", _pct(tot_alert_clicked_u, tot_alert_shown_u),
+         _alert_baseline(baseline)),
+        ("Overall Reco Adoption", overall_reco_ctr, _reco_baseline(baseline)),
         ("F-Assured CTR", fa_ctr,
          _rate_baseline(baseline, "gc_fa_recco_applied", "gc_fa_recco_shown")),
         ("Suppression CTR", supp_ctr,

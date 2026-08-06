@@ -112,6 +112,35 @@ PRICE_RECO_PAIRS = list(zip(PRICE_RECOS_SHOWN, PRICE_RECOS_APPLIED))
 REST_RECO_PAIRS  = list(zip(REST_RECOS_SHOWN, REST_RECOS_APPLIED))
 ALERT_PAIRS      = list(zip(ALERTS_SHOWN, ALERTS_CLICKED))
 
+# ── OR-dedup query groups ─────────────────────────────────────────────────────
+# Each key maps to the list of events to OR-deduplicate across via JQL.
+# A seller who triggered multiple events in the group is counted once (true union).
+# Used for all L0 KPI rates (Pill, Alert, A&P, Reco Adoption).
+OR_QUERY_GROUPS: dict[str, list[str]] = {
+    # Pill engagement denominator: sellers shown any filter pill
+    "pill_shown_or":  PILLS_SHOWN,
+    # Pill engagement numerator: sellers who clicked any filter pill
+    "pill_click_or":  PILLS_CLICKED,
+    # Alert engagement denominator: sellers shown any alert
+    "alert_shown_or": ALERTS_SHOWN,
+    # Alert engagement numerator: sellers who clicked any alert CTA
+    "alert_click_or": ALERTS_CLICKED,
+    # A&P combined shown: sellers shown any pill OR any alert
+    "ap_shown_or":    PILLS_SHOWN + ALERTS_SHOWN,
+    # A&P combined clicked: sellers who clicked any pill OR any alert
+    "ap_click_or":    PILLS_CLICKED + ALERTS_CLICKED,
+    # Reco shown OR across 6 types (excl NFBF — different event suffix)
+    "recco_shown_or": PRICE_RECOS_SHOWN + [
+        "gc_fa_recco_shown",
+        "gc_suppression_recco_shown",
+    ],
+    # Reco applied OR across 6 types (excl Suppression — different event suffix)
+    "recco_applied_or": PRICE_RECOS_APPLIED + [
+        "gc_fa_recco_applied",
+        "gc_nfbf_oos_recco_applied",
+    ],
+}
+
 PRICE_RECO_LABELS = {
     "gc_buy_now_recco_shown":   "Buy Now",
     "gc_inc_vis_recco_shown":   "Increase Visibility",

@@ -16,7 +16,7 @@ from datetime import date, timedelta
 
 import requests
 
-from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS, LAUNCH_DATE, TRAFFIC_EVENT
+from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS, LAUNCH_DATE, TRAFFIC_EVENT, OR_QUERY_GROUPS
 
 log = logging.getLogger(__name__)
 
@@ -170,6 +170,45 @@ function main() {{
     return monthly
 
 
+def _or_unique_jql(from_date: str, to_date: str, events: list[str]) -> int:
+    """
+    OR-deduplicated unique seller count across all listed events.
+    A seller who triggered multiple events in the list is counted exactly once.
+    Uses groupByUser([], any()) → one row per distinct_id → reduce(count()).
+    """
+    selectors = json.dumps([{"event": e} for e in events])
+    script = f"""
+function main() {{
+  return Events({{
+    from_date: '{from_date}',
+    to_date: '{to_date}',
+    event_selectors: {selectors}
+  }}).groupByUser([], mixpanel.reducer.any())
+  .groupBy([], mixpanel.reducer.count());
+}}"""
+    rows = _jql(script)
+    # .groupBy([], count()) → [{"key": [], "value": N}]
+    if isinstance(rows, list) and rows:
+        r = rows[0]
+        if isinstance(r, dict):
+            return int(r.get("value", 0))
+        if isinstance(r, (int, float)):
+            return int(r)
+    return 0
+
+
+def _fetch_or_uniques(from_date: str, to_date: str) -> dict[str, int]:
+    """
+    Fetch OR-dedup unique seller counts for every group defined in OR_QUERY_GROUPS.
+    Queries are run sequentially to stay within Mixpanel's concurrent-request limit.
+    """
+    results: dict[str, int] = {}
+    for key, events in OR_QUERY_GROUPS.items():
+        log.info("OR-dedup query: %s (%s → %s)", key, from_date, to_date)
+        results[key] = _or_unique_jql(from_date, to_date, events)
+    return results
+
+
 def get_windows(n_weeks: int = 5) -> list[tuple[str, str]]:
     """
     Returns n_weeks windows, most-recent first.
@@ -194,9 +233,10 @@ def fetch_all_windows(windows: list[tuple[str, str]]) -> list[dict]:
 
     def _fetch(idx: int, from_date: str, to_date: str):
         log.info("Fetching window %s → %s", from_date, to_date)
-        tot  = _totals_jql(from_date, to_date)
-        uniq = _uniques_jql(from_date, to_date)
-        return idx, {"total": tot, "unique": uniq, "from": from_date, "to": to_date}
+        tot     = _totals_jql(from_date, to_date)
+        uniq    = _uniques_jql(from_date, to_date)
+        or_uniq = _fetch_or_uniques(from_date, to_date)
+        return idx, {"total": tot, "unique": uniq, "or": or_uniq, "from": from_date, "to": to_date}
 
     # max_workers=2 → at most 2 windows fetched in parallel = max 2 concurrent JQL
     # queries at a time (totals + uniques inside each thread run sequentially).
