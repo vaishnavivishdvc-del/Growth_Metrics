@@ -16,7 +16,7 @@ from datetime import date, timedelta
 
 import requests
 
-from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS, LAUNCH_DATE, TRAFFIC_EVENT, OR_QUERY_GROUPS
+from config import MX_PROJECT_ID, MX_SA_USERNAME, MX_SA_SECRET, ALL_EVENTS, LAUNCH_DATE, TRAFFIC_EVENT
 
 log = logging.getLogger(__name__)
 
@@ -26,9 +26,8 @@ JQL_URL = "https://eu.mixpanel.com/api/2.0/jql"
 _SELECTORS = json.dumps([{"event": e} for e in ALL_EVENTS])
 
 
-_MAX_RETRIES  = 5
-_RETRY_WAIT   = 120   # seconds — 2× Mixpanel's ~60-s rolling window for safety
-_INTER_QUERY_SLEEP = 1  # seconds between consecutive JQL calls within a window
+_MAX_RETRIES = 4
+_RETRY_WAIT  = 70   # seconds — just over Mixpanel's 60-s rolling window
 
 
 def _jql(script: str) -> list:
@@ -171,42 +170,6 @@ function main() {{
     return monthly
 
 
-def _or_unique_jql(from_date: str, to_date: str, events: list[str]) -> int:
-    """OR-deduplicated unique seller count across all listed events."""
-    selectors = json.dumps([{"event": e} for e in events])
-    script = f"""
-function main() {{
-  return Events({{
-    from_date: '{from_date}',
-    to_date: '{to_date}',
-    event_selectors: {selectors}
-  }}).groupByUser([], mixpanel.reducer.any())
-  .groupBy([], mixpanel.reducer.count());
-}}"""
-    rows = _jql(script)
-    if isinstance(rows, list) and rows:
-        r = rows[0]
-        if isinstance(r, dict):
-            return int(r.get("value", 0))
-        if isinstance(r, (int, float)):
-            return int(r)
-    return 0
-
-
-def _or_uniques_jql(from_date: str, to_date: str) -> dict[str, int]:
-    """
-    Fetch OR-dedup unique seller counts for every group in OR_QUERY_GROUPS.
-    Runs sequentially with a 1-second gap between calls to stay within
-    Mixpanel's rolling rate limit.
-    """
-    results: dict[str, int] = {}
-    for key, events in OR_QUERY_GROUPS.items():
-        log.info("OR-dedup query: %s (%s → %s)", key, from_date, to_date)
-        results[key] = _or_unique_jql(from_date, to_date, events)
-        time.sleep(_INTER_QUERY_SLEEP)
-    return results
-
-
 def get_windows(n_weeks: int = 5) -> list[tuple[str, str]]:
     """
     Returns n_weeks windows, most-recent first.
@@ -231,16 +194,14 @@ def fetch_all_windows(windows: list[tuple[str, str]]) -> list[dict]:
 
     def _fetch(idx: int, from_date: str, to_date: str):
         log.info("Fetching window %s → %s", from_date, to_date)
-        tot = _totals_jql(from_date, to_date)
-        time.sleep(_INTER_QUERY_SLEEP)
+        tot  = _totals_jql(from_date, to_date)
         uniq = _uniques_jql(from_date, to_date)
-        time.sleep(_INTER_QUERY_SLEEP)
-        or_uniq = _or_uniques_jql(from_date, to_date)   # 1 bitmask call for all 8 OR groups
-        return idx, {"total": tot, "unique": uniq, "or": or_uniq, "from": from_date, "to": to_date}
+        return idx, {"total": tot, "unique": uniq, "from": from_date, "to": to_date}
 
-    # max_workers=1 → windows processed sequentially, one JQL at a time.
-    # Prevents request bursts that trip Mixpanel's rolling rate limit.
-    with ThreadPoolExecutor(max_workers=1) as ex:
+    # max_workers=2 → at most 2 windows fetched in parallel = max 2 concurrent JQL
+    # queries at a time (totals + uniques inside each thread run sequentially).
+    # Mixpanel allows 5 concurrent and 60/hour; this keeps us comfortably under both.
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures = {
             ex.submit(_fetch, i, f, t): i
             for i, (f, t) in enumerate(windows)
